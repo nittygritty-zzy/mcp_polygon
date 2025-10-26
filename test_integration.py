@@ -29,6 +29,7 @@ from src.mcp_polygon.server import (
     list_ticker_news,
     get_options_snapshot,
     get_options_contract,
+    get_options_chain_snapshot,
 )
 
 
@@ -216,6 +217,19 @@ async def test_options_contract():
     return "options_contract" if len(result) > 0 and "Error" not in result else None
 
 
+async def test_options_chain_snapshot():
+    """Test Options Chain Snapshot."""
+    print("\n=== Testing Options Chain Snapshot ===")
+    result = await get_options_chain_snapshot(
+        underlying_asset="ORCL", strike_price_gte=275, strike_price_lte=295, limit=50
+    )
+    print("✓ Options chain snapshot for ORCL")
+    print(f"  First 200 chars: {result[:200]}...")
+    return (
+        "options_chain_snapshot" if len(result) > 0 and "Error" not in result else None
+    )
+
+
 async def main():
     """Run all integration tests."""
     print("=" * 60)
@@ -243,6 +257,7 @@ async def main():
         ("News", test_news),
         ("Options Snapshot", test_options_snapshot),
         ("Options Contract", test_options_contract),
+        ("Options Chain Snapshot", test_options_chain_snapshot),
     ]
 
     results = []

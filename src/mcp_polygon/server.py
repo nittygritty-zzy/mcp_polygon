@@ -7015,7 +7015,7 @@ async def get_options_chain_snapshot(
     to select optimal long and short legs for the spread.
     """
     try:
-        results = polygon_client.get_snapshot_option_chain(
+        results = polygon_client.list_snapshot_options_chain(
             underlying_asset=underlying_asset,
             params={
                 **(params or {}),
