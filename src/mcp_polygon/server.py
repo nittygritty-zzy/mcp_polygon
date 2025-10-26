@@ -37,7 +37,64 @@ async def get_aggs(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    List aggregate bars for a ticker over a given date range in custom time window sizes.
+    Retrieve aggregated historical OHLC (Open, High, Low, Close) and volume data for a specified
+    stock ticker over a custom date range and time interval in Eastern Time (ET). Aggregates are
+    constructed exclusively from qualifying trades that meet specific conditions.
+
+    Reference: https://polygon.io/docs/rest/stocks/aggregates/custom-bars
+
+    Essential for data visualization, technical analysis, backtesting strategies, and market research.
+    Supports pre-market, regular market, and after-hours sessions with flexible time intervals.
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL", "MSFT", "GOOGL")
+    - multiplier: Size of the timespan multiplier (e.g., 1, 5, 15, 30)
+    - timespan: Size of the time window (minute, hour, day, week, month, quarter, year)
+    - from_: Start of aggregate window (YYYY-MM-DD or millisecond timestamp)
+    - to: End of aggregate window (YYYY-MM-DD or millisecond timestamp)
+    - adjusted: Whether to adjust for splits (default: True)
+    - sort: Sort order - "asc" (oldest first) or "desc" (newest first)
+    - limit: Number of base aggregates queried (default: 10, max: 50000)
+    - params: Additional query parameters
+
+    Example: get_aggs("AAPL", 1, "day", "2023-01-01", "2023-01-31")
+             gets daily bars for Apple in January 2023
+    Example: get_aggs("MSFT", 5, "minute", "2023-06-15", "2023-06-15", limit=100)
+             gets 5-minute bars for Microsoft on June 15, 2023
+    Example: get_aggs("GOOGL", 1, "hour", "2023-03-01", "2023-03-31")
+             gets hourly bars for Google in March 2023
+    Example: get_aggs("TSLA", 15, "minute", "2023-09-20 09:30:00", "2023-09-20 16:00:00")
+             gets 15-minute bars for Tesla during regular market hours
+    Example: get_aggs("SPY", 1, "week", "2022-01-01", "2022-12-31")
+             gets weekly bars for SPY for entire year 2022
+
+    Response includes:
+    - c: Close price
+    - h: High price
+    - l: Low price
+    - o: Open price
+    - v: Trading volume
+    - vw: Volume weighted average price (VWAP)
+    - t: Timestamp (milliseconds since epoch)
+    - n: Number of transactions
+
+    Note: Custom bars considerations:
+    - All times in Eastern Time (ET)
+    - Aggregates built only from qualifying trades
+    - Empty intervals indicate no trading activity (no bars produced)
+    - Covers pre-market (4:00 AM - 9:30 AM ET), regular (9:30 AM - 4:00 PM ET), and after-hours (4:00 PM - 8:00 PM ET)
+    - Multiplier × timespan = bar size (e.g., 5 × minute = 5-minute bars)
+    - Default limit is 10, increase for longer time ranges
+    - Max limit is 50000 base aggregates
+    - Use pagination (next_url) for very large datasets
+    - Adjusted=true accounts for stock splits in historical data
+    - VWAP provides average price weighted by volume
+    - Transaction count (n) indicates trading activity level
+    - Sort asc for chronological order, desc for reverse chronological
+
+    Use case: Building a stock charting application - fetch 5-minute bars for intraday analysis,
+    daily bars for swing trading, or weekly bars for long-term trend analysis. Combine with
+    technical indicators to identify entry/exit points and backtest trading strategies.
     """
     try:
         results = polygon_client.get_aggs(
@@ -72,7 +129,20 @@ async def list_aggs(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Iterate through aggregate bars for a ticker over a given date range.
+    Iterate through aggregate bars (OHLC) for a ticker over a given date range.
+    Similar to get_aggs but designed for pagination through large result sets.
+
+    Reference: https://polygon.io/docs/rest/stocks/aggregates/custom-bars
+
+    Parameters:
+    - ticker: The ticker symbol (e.g., "AAPL", "MSFT")
+    - multiplier: Size of the timespan multiplier (e.g., 1 for 1 day, 5 for 5 minutes)
+    - timespan: Size of the time window (minute, hour, day, week, month, quarter, year)
+    - from_: Start date (YYYY-MM-DD) or timestamp
+    - to: End date (YYYY-MM-DD) or timestamp
+    - adjusted: Whether to adjust for splits (default: True)
+    - sort: Sort order (asc or desc)
+    - limit: Number of results to return (default: 10)
     """
     try:
         results = polygon_client.list_aggs(
@@ -103,7 +173,62 @@ async def get_grouped_daily_aggs(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get grouped daily bars for entire market for a specific date.
+    Retrieve daily OHLC (open, high, low, close), volume, and volume-weighted average price (VWAP)
+    data for all U.S. stocks on a specified trading date. This endpoint returns comprehensive market
+    coverage in a single request, enabling wide-scale analysis, bulk data processing, and research
+    into broad market performance.
+
+    Reference: https://polygon.io/docs/rest/stocks/aggregates/daily-market-summary
+
+    Essential for market overview, bulk data processing, historical research, and portfolio
+    comparison. Returns data for thousands of stocks in one request.
+
+    Parameters:
+    - date: Trading date for the aggregate window (YYYY-MM-DD, e.g., "2023-01-09")
+    - adjusted: Whether to adjust for splits (default: True)
+    - include_otc: Include OTC securities in response (default: False)
+    - locale: Filter by locale (us, global)
+    - market_type: Filter by market type (stocks, crypto, fx, otc, indices)
+    - params: Additional query parameters
+
+    Example: get_grouped_daily_aggs("2023-01-09")
+             gets daily bars for all US stocks on January 9, 2023
+    Example: get_grouped_daily_aggs("2023-06-15", include_otc=True)
+             gets daily bars for all stocks including OTC securities
+    Example: get_grouped_daily_aggs("2023-03-20", adjusted=False)
+             gets unadjusted daily bars for all stocks
+    Example: get_grouped_daily_aggs("2022-12-30", locale="us", market_type="stocks")
+             gets daily bars for US stocks on December 30, 2022
+
+    Response includes (for each ticker):
+    - T: Ticker symbol
+    - o: Open price
+    - h: High price
+    - l: Low price
+    - c: Close price
+    - v: Trading volume
+    - vw: Volume weighted average price (VWAP)
+    - t: Timestamp (milliseconds since epoch)
+    - n: Number of transactions
+
+    Note: Daily market summary considerations:
+    - Returns data for ALL stocks traded on specified date
+    - Can return thousands of tickers in single response (large dataset)
+    - Includes pre-market, regular, and after-hours trading activity
+    - Default excludes OTC securities (set include_otc=True to include)
+    - Adjusted=true accounts for stock splits in historical data
+    - VWAP provides volume-weighted average for the day
+    - Transaction count (n) indicates daily trading activity level
+    - Timestamp is beginning of the trading day
+    - Useful for market-wide analysis and screening
+    - Perfect for identifying top gainers/losers across market
+    - Enables bulk historical data collection
+    - Results include delisted stocks if they traded on that date
+    - Market-wide volatility and volume analysis
+
+    Use case: Building a market heatmap - fetch grouped daily data to identify the day's top
+    performers and worst performers across the entire market, calculate market-wide metrics like
+    average volume and volatility, and visualize sector performance by aggregating related tickers.
     """
     try:
         results = polygon_client.get_grouped_daily_aggs(
@@ -129,7 +254,40 @@ async def get_daily_open_close_agg(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get daily open, close, high, and low for a specific ticker and date.
+    Retrieve the opening and closing prices for a specific stock ticker on a given date,
+    along with any pre-market and after-hours trade prices. This endpoint provides essential
+    daily pricing details including OHLC (open, high, low, close), volume, and extended
+    trading session data.
+
+    Reference: https://polygon.io/docs/rest/stocks/aggregates/daily-ticker-summary
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for Apple Inc., "MSFT" for Microsoft)
+    - date: The date for the requested open/close in YYYY-MM-DD format (e.g., "2023-01-09")
+    - adjusted: Whether results are adjusted for splits (default: True). Set to False for
+                unadjusted results.
+
+    Response includes:
+    - open, high, low, close: Regular trading session OHLC prices
+    - preMarket: Opening price in pre-market trading session
+    - afterHours: Closing price in after-hours trading session
+    - volume: Total trading volume for the day
+    - otc: Whether this is an OTC ticker (if applicable)
+
+    Use Cases:
+    - Daily performance analysis: Track day-over-day price movements
+    - Historical data collection: Build historical price datasets
+    - After-hours insights: Analyze extended trading session activity
+    - Portfolio tracking: Monitor daily changes in holdings
+
+    Example: get_daily_open_close_agg("AAPL", "2023-01-09") returns AAPL's complete daily
+             summary for Jan 9, 2023, including pre-market and after-hours prices
+
+    Example: get_daily_open_close_agg("TSLA", "2024-03-15", adjusted=False) returns
+             unadjusted prices for Tesla on March 15, 2024
+
+    Note: For multiple days of data, use get_aggs instead. For the most recent trading day,
+          use get_previous_close_agg instead.
     """
     try:
         results = polygon_client.get_daily_open_close_agg(
@@ -148,7 +306,43 @@ async def get_previous_close_agg(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get previous day's open, close, high, and low for a specific ticker.
+    Retrieve the previous trading day's open, high, low, and close (OHLC) data for a
+    specified stock ticker. This endpoint provides key pricing metrics including volume
+    and VWAP (volume weighted average price) to help assess recent performance and
+    inform trading strategies.
+
+    Reference: https://polygon.io/docs/rest/stocks/aggregates/previous-day-bar
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for Apple Inc., "MSFT" for Microsoft)
+    - adjusted: Whether results are adjusted for splits (default: True). Set to False for
+                unadjusted results.
+
+    Response includes:
+    - o (open): Opening price for the previous trading day
+    - h (high): Highest price during the previous trading day
+    - l (low): Lowest price during the previous trading day
+    - c (close): Closing price for the previous trading day
+    - v (volume): Total trading volume for the day
+    - vw (vwap): Volume weighted average price
+    - t (timestamp): Unix timestamp of the bar
+    - T (ticker): The ticker symbol
+
+    Use Cases:
+    - Baseline comparison: Compare current prices to previous day's performance
+    - Technical analysis: Calculate daily indicators and price changes
+    - Market research: Analyze recent trading patterns and momentum
+    - Daily reporting: Generate end-of-day summaries and alerts
+
+    Example: get_previous_close_agg("AAPL") returns Apple's most recent trading day data
+             with full OHLC metrics and volume
+
+    Example: get_previous_close_agg("TSLA", adjusted=False) returns Tesla's previous day
+             data without split adjustments
+
+    Note: This automatically retrieves the last available trading day, accounting for
+          weekends and holidays. For a specific historical date, use get_daily_open_close_agg
+          instead. For multiple days of historical data, use get_aggs.
     """
     try:
         results = polygon_client.get_previous_close_agg(
@@ -160,7 +354,7 @@ async def get_previous_close_agg(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_trades(
     ticker: str,
     timestamp: Optional[Union[str, int, datetime, date]] = None,
@@ -196,7 +390,7 @@ async def list_trades(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def get_last_trade(
     ticker: str,
     params: Optional[Dict[str, Any]] = None,
@@ -212,7 +406,7 @@ async def get_last_trade(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def get_last_crypto_trade(
     from_: str,
     to: str,
@@ -231,7 +425,7 @@ async def get_last_crypto_trade(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_quotes(
     ticker: str,
     timestamp: Optional[Union[str, int, datetime, date]] = None,
@@ -267,7 +461,7 @@ async def list_quotes(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def get_last_quote(
     ticker: str,
     params: Optional[Dict[str, Any]] = None,
@@ -283,7 +477,7 @@ async def get_last_quote(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def get_last_forex_quote(
     from_: str,
     to: str,
@@ -330,15 +524,98 @@ async def get_real_time_currency_conversion(
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_universal_snapshots(
-    type: str,
+    type: Optional[str] = None,
+    ticker: Optional[str] = None,
     ticker_any_of: Optional[List[str]] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get universal snapshots for multiple assets of a specific type.
+    Retrieve unified snapshots of market data for multiple asset classes including stocks, options,
+    forex, and cryptocurrencies in a single request. This endpoint consolidates key metrics such as
+    last trade, last quote, open, high, low, close, and volume for a comprehensive view of current
+    market conditions. By aggregating data from various sources into one response, users can efficiently
+    monitor, compare, and act on information spanning multiple markets and asset types.
+
+    Reference: https://polygon.io/docs/rest/stocks/snapshots/unified-snapshot
+
+    Parameters:
+    - type: Query by asset type ("stocks", "options", "forex", "crypto", "indices")
+    - ticker: Search a range of tickers lexicographically
+    - ticker_any_of: Comma-separated list of specific tickers (up to 250, e.g., ["AAPL", "TSLA", "GOOG"])
+                     If no tickers are passed, all results will be returned in a paginated manner
+    - ticker_gte: Range by ticker - greater than or equal to (lexicographic)
+    - ticker_gt: Range by ticker - greater than (lexicographic)
+    - ticker_lte: Range by ticker - less than or equal to (lexicographic)
+    - ticker_lt: Range by ticker - less than (lexicographic)
+    - order: Order results based on the sort field ("asc" or "desc")
+    - limit: Limit the number of results returned (default: 10, max: 250)
+    - sort: Sort field used for ordering (e.g., "ticker")
+
+    Response includes (varies by asset type):
+    Common fields for all asset types:
+    - ticker: The ticker symbol for the asset
+    - type: The asset class (stocks, options, fx, crypto, indices)
+    - market_status: Market status (open, closed, early_trading, late_trading, regular_trading)
+    - name: The name of the asset
+    - last_trade: Most recent trade (price, size, conditions, exchange, timestamp, timeframe)
+    - last_quote: Most recent quote (bid, ask, bid_size, ask_size, exchanges, midpoint, timeframe)
+    - last_updated: Nanosecond timestamp of when this information was updated
+    - timeframe: Time relevance of the data (DELAYED or REAL-TIME)
+
+    For stocks:
+    - last_minute: Most recent minute aggregate (close, high, low, open, transactions, volume, vwap)
+    - session: Comprehensive trading session metrics with early/regular/late trading changes
+
+    For options:
+    - break_even_price: Price for contract to break even (call: strike + premium, put: strike - premium)
+    - details: Contract specifications (type, style, expiration, strike, shares per contract, underlying)
+    - greeks: Delta, gamma, theta, vega (not returned for deep in-the-money contracts)
+    - implied_volatility: Market's forecast for underlying volatility based on option price
+    - open_interest: Quantity of contracts held at end of last trading day
+    - underlying_asset: Information on the underlying stock (price, ticker, change_to_break_even)
+    - fmv: Fair Market Value (Business plans only - proprietary real-time algorithm)
+    - fmv_last_updated: Nanosecond timestamp of last FMV calculation
+
+    For indices:
+    - value: Current value of the index
+
+    Error handling:
+    - error: Error code if ticker lookup failed (e.g., "NOT_FOUND")
+    - message: Error message describing the issue (e.g., "Ticker not found.")
+
+    Use Cases:
+    - Cross-market analysis: Compare performance across stocks, options, forex, and crypto
+    - Diversified portfolio monitoring: Track all positions regardless of asset class
+    - Global market insights: Monitor international markets and multiple asset types
+    - Multi-asset trading strategies: Build strategies that span different market types
+
+    Example: list_universal_snapshots(type="stocks", ticker_any_of=["AAPL", "MSFT", "GOOGL"])
+             retrieves snapshots for Apple, Microsoft, and Google stocks with comprehensive
+             market data including last trade, quote, minute bar, and session metrics
+
+    Example: list_universal_snapshots(ticker_any_of=["AAPL", "O:NCLH221014C00005000", "X:BTCUSD"])
+             retrieves mixed asset types: Apple stock, NCLH options contract, and Bitcoin/USD
+             forex pair - all in a single response
+
+    Example: list_universal_snapshots(type="options", ticker_gte="O:AAPL", ticker_lt="O:AAPLZ", limit=100)
+             retrieves up to 100 Apple options contracts using lexicographic range, including
+             greeks, break-even prices, and underlying asset data
+
+    Example: list_universal_snapshots(type="crypto", limit=50, sort="ticker", order="asc")
+             retrieves top 50 cryptocurrency snapshots sorted alphabetically by ticker
+
+    Note: This endpoint is ideal for applications requiring cross-market monitoring. Individual
+          ticker errors don't fail the entire request - they're returned with error/message fields.
+          Up to 250 tickers can be queried via ticker_any_of. Response structure varies by asset
+          type. For single ticker snapshots, use get_snapshot_ticker. For full market coverage of
+          a single asset type, use get_snapshot_all.
     """
     try:
         results = polygon_client.list_universal_snapshots(
@@ -347,7 +624,20 @@ async def list_universal_snapshots(
             order=order,
             limit=limit,
             sort=sort,
-            params=params,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker": ticker,
+                        "ticker.gte": ticker_gte,
+                        "ticker.gt": ticker_gt,
+                        "ticker.lte": ticker_lte,
+                        "ticker.lt": ticker_lt,
+                    }.items()
+                    if v is not None
+                },
+            },
             raw=True,
         )
 
@@ -364,7 +654,55 @@ async def get_snapshot_all(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get a snapshot of all tickers in a market.
+    Retrieve a comprehensive snapshot of the entire U.S. stock market, covering 10,000+ actively
+    traded tickers in a single response. This endpoint consolidates key information like pricing,
+    volume, and trade activity to provide a full-market view, eliminating the need for multiple
+    queries. By accessing all tickers at once, users can efficiently monitor broad market conditions,
+    perform bulk analyses, and power applications that require complete, current market information.
+
+    Reference: https://polygon.io/docs/rest/stocks/snapshots/full-market-snapshot
+
+    Parameters:
+    - market_type: The market type (stocks, crypto, fx, otc, indices)
+    - tickers: Optional case-sensitive list of specific tickers to filter (e.g., ["AAPL", "TSLA", "GOOG"])
+               If not provided, returns all tickers in the market
+    - include_otc: Include OTC (over-the-counter) securities in the response (default: False)
+
+    Response includes (for each ticker):
+    - ticker: The ticker symbol
+    - day: Today's aggregate (open, high, low, close, volume, vwap)
+    - min: Latest minute bar aggregate with similar metrics
+    - prevDay: Previous trading day's aggregate data
+    - lastTrade: Most recent trade (price, size, exchange, conditions, timestamp)
+    - lastQuote: Current bid/ask spread (bid price, bid size, ask price, ask size)
+    - todaysChange: Absolute price change from previous close
+    - todaysChangePerc: Percentage change from previous close
+    - updated: Timestamp of last update
+
+    Data Timing:
+    - Snapshot data is cleared at 3:30 AM EST daily
+    - Updates begin as exchanges report new data (as early as 4:00 AM EST)
+    - Provides real-time data during market hours
+
+    Use Cases:
+    - Market overview: Get a bird's-eye view of the entire market at once
+    - Bulk data processing: Analyze thousands of securities simultaneously
+    - Heat maps/dashboards: Power visualizations showing market-wide trends
+    - Automated monitoring: Build systems that track all market movements
+
+    Example: get_snapshot_all("stocks") returns complete snapshots for all 10,000+ stock tickers
+             in the U.S. market with full OHLC, volume, and trade data for each
+
+    Example: get_snapshot_all("stocks", tickers=["AAPL", "MSFT", "GOOGL"]) returns snapshots
+             for just Apple, Microsoft, and Google
+
+    Example: get_snapshot_all("stocks", include_otc=True) returns all stocks including
+             over-the-counter securities
+
+    Note: This can return a very large dataset when querying all tickers (10,000+ stocks).
+          Consider using the tickers parameter to filter to specific symbols when you don't
+          need the full market. For a single ticker, use get_snapshot_ticker instead. For
+          more advanced filtering, use list_universal_snapshots.
     """
     try:
         results = polygon_client.get_snapshot_all(
@@ -388,7 +726,60 @@ async def get_snapshot_direction(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get gainers or losers for a market.
+    Retrieve snapshot data highlighting the top 20 gainers or losers in the U.S. stock market.
+    Gainers are stocks with the largest percentage increase since the previous day's close, and
+    losers are those with the largest percentage decrease. To ensure meaningful insights, only
+    tickers with a minimum trading volume of 10,000 are included. By focusing on these market
+    movers, users can quickly identify significant price shifts and monitor evolving market dynamics.
+
+    Reference: https://polygon.io/docs/rest/stocks/snapshots/top-market-movers
+
+    Parameters:
+    - market_type: The market type (stocks, crypto, fx, otc, indices)
+    - direction: The direction of snapshot results to return ("gainers" or "losers")
+    - include_otc: Include OTC (over-the-counter) securities in the response (default: False)
+
+    Response includes (for each ticker in top 20):
+    - ticker: The ticker symbol
+    - day: Today's aggregate (open, high, low, close, volume, vwap)
+    - min: Latest minute bar aggregate with similar metrics
+    - prevDay: Previous trading day's aggregate data
+    - lastTrade: Most recent trade (price, size, exchange, conditions, timestamp)
+    - lastQuote: Current bid/ask spread (bid price, bid size, ask price, ask size)
+    - todaysChange: Absolute price change from previous close
+    - todaysChangePerc: Percentage change from previous close
+    - updated: Timestamp of last update
+
+    Data Timing:
+    - Snapshot data is cleared at 3:30 AM EST daily
+    - Updates begin as exchanges report new information (around 4:00 AM EST)
+    - Provides real-time data during market hours
+
+    Filtering:
+    - Only includes tickers with minimum trading volume of 10,000
+    - Returns top 20 movers by percentage change
+    - Sorted by percentage change (descending for gainers, ascending for losers)
+
+    Use Cases:
+    - Market movers identification: Quickly spot stocks with significant price movements
+    - Trading strategies: Identify momentum plays and reversal opportunities
+    - Market sentiment analysis: Gauge overall market direction and strength
+    - Portfolio adjustments: React to major price shifts in holdings or watchlist
+
+    Example: get_snapshot_direction("stocks", "gainers") returns top 20 stocks with the
+             largest percentage increase since previous close, filtered to stocks with
+             10,000+ trading volume
+
+    Example: get_snapshot_direction("stocks", "losers") returns top 20 stocks with the
+             largest percentage decrease since previous close
+
+    Example: get_snapshot_direction("stocks", "gainers", include_otc=True) returns top 20
+             gainers including over-the-counter securities
+
+    Note: This endpoint focuses on the most significant market movements. The volume filter
+          (10,000 minimum) ensures results represent liquid, actively traded stocks rather
+          than low-volume penny stocks with volatile percentage swings. For broader market
+          coverage, use get_snapshot_all. For specific tickers, use get_snapshot_ticker.
     """
     try:
         results = polygon_client.get_snapshot_direction(
@@ -406,12 +797,64 @@ async def get_snapshot_direction(
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_snapshot_ticker(
-    market_type: str,
     ticker: str,
+    market_type: str = "stocks",
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get snapshot for a specific ticker.
+    Retrieve the most recent market data snapshot for a single stock ticker. This endpoint consolidates
+    the latest trade, quote, and aggregated data (minute bar, today's day bar, and previous day)
+    for the specified ticker. By focusing on a single ticker, users can closely monitor real-time
+    developments and incorporate up-to-date information into trading strategies, alerts, or
+    company-level reporting.
+
+    Reference: https://polygon.io/docs/rest/stocks/snapshots/single-ticker-snapshot
+
+    API Endpoint: GET /v2/snapshot/locale/us/markets/stocks/tickers/{stocksTicker}
+
+    Parameters:
+    - ticker: Case-sensitive stock ticker symbol (e.g., "AAPL" for Apple Inc., "MSFT" for Microsoft)
+    - market_type: Market type (default: "stocks") - This endpoint is specific to stocks
+
+    Response includes:
+    - day: Today's aggregate (open, high, low, close, volume, vwap)
+    - min: Latest minute bar aggregate with similar metrics
+    - prevDay: Previous trading day's aggregate data
+    - lastTrade: Most recent trade (price, size, exchange, conditions, timestamp)
+    - lastQuote: Current bid/ask spread (bid price, bid size, ask price, ask size)
+    - todaysChange: Absolute price change from previous close
+    - todaysChangePerc: Percentage change from previous close
+    - updated: Timestamp of last update
+
+    Data Timing:
+    - Snapshot data is cleared at 3:30 AM EST daily
+    - Updates begin as exchanges report new information (as early as 4:00 AM EST)
+    - Provides real-time data during market hours
+
+    Use Cases:
+    - Focused monitoring: Track specific stocks intensively during trading hours
+    - Real-time analysis: Make decisions based on latest trade and quote data
+    - Price alerts: Trigger notifications when targets are reached
+    - Investor relations: Provide stakeholders with current company stock status
+
+    Data Recency by Plan:
+    - Stocks Basic: Limited access, not included
+    - Stocks Starter/Developer: 15-minute delayed data
+    - Stocks Advanced/Business: Real-time data
+
+    Example: get_snapshot_ticker("AAPL") returns Apple's complete market snapshot
+             including current day OHLC, last trade, current quote, and previous day data
+
+    Example: get_snapshot_ticker("TSLA") returns Tesla's real-time snapshot with
+             all consolidated market data
+
+    Example: get_snapshot_ticker("MSFT") returns Microsoft's current snapshot with
+             today's change percentage and absolute price change
+
+    Note: This provides consolidated real-time market data for a single stock ticker.
+          Snapshot data clears daily at 3:30 AM EST and updates begin around 4:00 AM EST.
+          For multiple tickers, use list_universal_snapshots or get_snapshot_all instead.
+          For historical data, use aggregate endpoints like get_aggs or get_daily_open_close_agg.
     """
     try:
         results = polygon_client.get_snapshot_ticker(
@@ -464,11 +907,603 @@ async def get_snapshot_crypto_book(
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_sma(
+    ticker: str,
+    timestamp: Optional[Union[str, int, datetime, date]] = None,
+    timespan: Optional[str] = "day",
+    adjusted: Optional[bool] = True,
+    window: Optional[int] = 50,
+    series_type: Optional[str] = "close",
+    expand_underlying: Optional[bool] = False,
+    order: Optional[str] = "desc",
+    limit: Optional[int] = 10,
+    timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lt: Optional[Union[str, int, datetime, date]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve the Simple Moving Average (SMA) for a specified ticker over a defined time range.
+    The SMA calculates the average price across a set number of periods, smoothing price fluctuations
+    to reveal underlying trends and potential signals. Works with both stocks and options.
+
+    Reference (Stocks): https://polygon.io/docs/rest/stocks/technical-indicators/simple-moving-average
+    Reference (Options): https://polygon.io/docs/options/get_v1_indicators_sma__optionsticker
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for stocks, "O:SPY241220P00720000" for options)
+    - timestamp: Query by specific timestamp (YYYY-MM-DD format or millisecond timestamp)
+    - timespan: Size of the aggregate time window (minute, hour, day, week, month, quarter, year)
+                Default: "day"
+    - adjusted: Whether aggregates used to calculate SMA are adjusted for splits (default: True)
+                Set to False for unadjusted results
+    - window: Window size used to calculate the SMA (default: 50)
+              e.g., window=10 with daily aggregates = 10-day moving average
+    - series_type: Price in the aggregate used to calculate SMA (default: "close")
+                   Options: "close", "open", "high", "low"
+                   e.g., "close" uses closing prices to calculate the SMA
+    - expand_underlying: Whether to include the aggregates used to calculate this indicator in the
+                         response (default: False)
+    - order: Order in which to return results, ordered by timestamp ("asc" or "desc")
+             Default: "desc"
+    - limit: Limit the number of results returned (default: 10, max: 5000)
+    - timestamp_gte: Range by timestamp - greater than or equal to
+    - timestamp_gt: Range by timestamp - greater than
+    - timestamp_lte: Range by timestamp - less than or equal to
+    - timestamp_lt: Range by timestamp - less than
+
+    Response includes:
+    - results.values: Array of objects with timestamp and SMA value pairs
+      - timestamp: Unix timestamp in milliseconds
+      - value: Calculated SMA value for that period
+    - results.underlying: The underlying aggregates used (if expand_underlying=True)
+      - aggregates: Array of OHLCV data (close, high, low, open, volume, vwap, timestamp, # trades)
+      - url: API URL to fetch the underlying aggregate data
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    Use Cases:
+    - Trend analysis: Identify the direction and strength of price trends over time
+    - Trading signal generation: Detect SMA crossovers (e.g., 50-day crossing 200-day) for buy/sell signals
+    - Identifying support/resistance: SMAs often act as dynamic support or resistance levels
+    - Refining entry/exit timing: Use SMA to confirm trend direction before entering or exiting positions
+
+    Example: get_sma("AAPL", window=50, timespan="day") returns 50-day SMA for Apple stock,
+             showing the average closing price over the last 50 trading days
+
+    Example: get_sma("MSFT", window=200, timespan="day", limit=30) returns 30 data points
+             of the 200-day SMA for Microsoft - useful for identifying major trend direction
+
+    Example: get_sma("AAPL", window=20, timespan="day", expand_underlying=True) returns
+             20-day SMA with the underlying OHLCV data used in the calculation
+
+    Example: get_sma("O:SPY241220P00720000", window=20, timespan="day") returns 20-day
+             SMA for SPY put option premium to identify trends in option pricing
+
+    Note: SMA considerations and best practices:
+    - Common windows: 50-day (intermediate trend), 100-day, and 200-day (long-term trend)
+    - Golden Cross: 50-day SMA crossing above 200-day SMA (bullish signal)
+    - Death Cross: 50-day SMA crossing below 200-day SMA (bearish signal)
+    - Shorter windows (10-20 periods) are more responsive to recent price changes
+    - Longer windows (100-200 periods) better filter out noise and identify major trends
+    - Window size of 10 with daily aggregates = 10-day moving average
+    - For options, track SMA of premium prices to identify momentum in option demand
+    - Use expand_underlying=True to analyze the raw price data behind the SMA calculation
+    - Series_type="close" is most common, but "high"/"low" can identify breakout levels
+    - Use timestamp range parameters (timestamp_gte, timestamp_lt) for specific date ranges
+    """
+    try:
+        # Build params dict for timestamp range filters
+        final_params = {**(params or {})}
+        if timestamp_gte is not None:
+            final_params["timestamp.gte"] = timestamp_gte
+        if timestamp_gt is not None:
+            final_params["timestamp.gt"] = timestamp_gt
+        if timestamp_lte is not None:
+            final_params["timestamp.lte"] = timestamp_lte
+        if timestamp_lt is not None:
+            final_params["timestamp.lt"] = timestamp_lt
+
+        # Build kwargs conditionally to avoid passing empty params
+        kwargs = {
+            "ticker": ticker,
+            "timespan": timespan,
+            "adjusted": adjusted,
+            "window": window,
+            "series_type": series_type,
+            "expand_underlying": expand_underlying,
+            "order": order,
+            "limit": limit,
+            "raw": True,
+        }
+        if timestamp is not None:
+            kwargs["timestamp"] = timestamp
+        if final_params:
+            kwargs["params"] = final_params
+
+        results = polygon_client.get_sma(**kwargs)
+
+        # Parse the response and extract the values array
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data and "values" in data["results"]:
+            # Wrap the values in a results key for consistent CSV formatting
+            formatted_data = {"results": data["results"]["values"]}
+            return json_to_csv(formatted_data)
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_ema(
+    ticker: str,
+    timestamp: Optional[Union[str, int, datetime, date]] = None,
+    timespan: Optional[str] = "day",
+    adjusted: Optional[bool] = True,
+    window: Optional[int] = 50,
+    series_type: Optional[str] = "close",
+    expand_underlying: Optional[bool] = False,
+    order: Optional[str] = "desc",
+    limit: Optional[int] = 10,
+    timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lt: Optional[Union[str, int, datetime, date]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve the Exponential Moving Average (EMA) for a specified ticker over a defined time range.
+    The EMA places greater weight on recent prices, enabling quicker trend detection and more responsive
+    signals compared to the Simple Moving Average (SMA). Works with both stocks and options.
+
+    Reference (Stocks): https://polygon.io/docs/rest/stocks/technical-indicators/exponential-moving-average
+    Reference (Options): https://polygon.io/docs/options/get_v1_indicators_ema__optionsticker
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for stocks, "O:SPY241220P00720000" for options)
+    - timestamp: Query by specific timestamp (YYYY-MM-DD format or millisecond timestamp)
+    - timespan: Size of the aggregate time window (minute, hour, day, week, month, quarter, year)
+                Default: "day"
+    - adjusted: Whether aggregates used to calculate EMA are adjusted for splits (default: True)
+                Set to False for unadjusted results
+    - window: Window size used to calculate the EMA (default: 50)
+              e.g., window=10 with daily aggregates = 10-day exponential moving average
+    - series_type: Price in the aggregate used to calculate EMA (default: "close")
+                   Options: "close", "open", "high", "low"
+                   e.g., "close" uses closing prices to calculate the EMA
+    - expand_underlying: Whether to include the aggregates used to calculate this indicator in the
+                         response (default: False)
+    - order: Order in which to return results, ordered by timestamp ("asc" or "desc")
+             Default: "desc"
+    - limit: Limit the number of results returned (default: 10, max: 5000)
+    - timestamp_gte: Range by timestamp - greater than or equal to
+    - timestamp_gt: Range by timestamp - greater than
+    - timestamp_lte: Range by timestamp - less than or equal to
+    - timestamp_lt: Range by timestamp - less than
+
+    Response includes:
+    - results.values: Array of objects with timestamp and EMA value pairs
+      - timestamp: Unix timestamp in milliseconds
+      - value: Calculated EMA value for that period
+    - results.underlying: The underlying aggregates used (if expand_underlying=True)
+      - url: API URL to fetch the underlying aggregate data
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    Use Cases:
+    - Trend identification: Detect the direction and strength of trends with more recent price emphasis
+    - EMA crossover signals: Generate buy/sell signals when EMAs of different periods cross
+    - Dynamic support/resistance levels: Use EMAs as adaptive support/resistance zones
+    - Adjusting strategies based on recent market volatility: React faster to market changes than SMA
+
+    Example: get_ema("AAPL", window=12, timespan="day") returns 12-day EMA for Apple stock,
+             with greater weight on recent prices for faster trend detection
+
+    Example: get_ema("MSFT", window=26, timespan="day", limit=30) returns 30 data points
+             of the 26-day EMA for Microsoft - commonly used with 12-day EMA for MACD
+
+    Example: get_ema("AAPL", window=12, timespan="day", expand_underlying=True) returns
+             12-day EMA with the underlying OHLCV data used in the calculation
+
+    Example: get_ema("O:SPY241220P00720000", window=12, timespan="day") returns 12-day
+             EMA for SPY put option premium to identify rapid premium changes
+
+    Note: EMA considerations and best practices:
+    - Common windows: 12-day and 26-day (for MACD component EMAs), 50-day, and 200-day
+    - EMA vs SMA: EMA responds faster to price changes due to exponential weighting of recent data
+    - Shorter windows (8-20 periods) detect trend changes quickly but may generate false signals
+    - Longer windows (50-200 periods) provide stronger trend confirmation with less noise
+    - Window size of 10 with daily aggregates = 10-day exponential moving average
+    - EMA crossovers generate earlier signals than SMA crossovers (e.g., 12 crossing 26)
+    - For options, EMA helps identify rapid premium changes and volatility shifts faster than SMA
+    - Use expand_underlying=True to analyze the raw price data behind the EMA calculation
+    - Series_type="close" is most common, but "high"/"low" can identify breakout levels
+    - Use timestamp range parameters (timestamp_gte, timestamp_lt) for specific date ranges
+    - More responsive to recent price action makes EMA ideal for short-term trading strategies
+    """
+    try:
+        # Build params dict for timestamp range filters
+        final_params = {**(params or {})}
+        if timestamp_gte is not None:
+            final_params["timestamp.gte"] = timestamp_gte
+        if timestamp_gt is not None:
+            final_params["timestamp.gt"] = timestamp_gt
+        if timestamp_lte is not None:
+            final_params["timestamp.lte"] = timestamp_lte
+        if timestamp_lt is not None:
+            final_params["timestamp.lt"] = timestamp_lt
+
+        # Build kwargs conditionally to avoid passing empty params
+        kwargs = {
+            "ticker": ticker,
+            "timespan": timespan,
+            "adjusted": adjusted,
+            "window": window,
+            "series_type": series_type,
+            "expand_underlying": expand_underlying,
+            "order": order,
+            "limit": limit,
+            "raw": True,
+        }
+        if timestamp is not None:
+            kwargs["timestamp"] = timestamp
+        if final_params:
+            kwargs["params"] = final_params
+
+        results = polygon_client.get_ema(**kwargs)
+
+        # Parse the response and extract the values array
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data and "values" in data["results"]:
+            # Wrap the values in a results key for consistent CSV formatting
+            formatted_data = {"results": data["results"]["values"]}
+            return json_to_csv(formatted_data)
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_macd(
+    ticker: str,
+    timestamp: Optional[Union[str, int, datetime, date]] = None,
+    timespan: Optional[str] = "day",
+    adjusted: Optional[bool] = True,
+    short_window: Optional[int] = 12,
+    long_window: Optional[int] = 26,
+    signal_window: Optional[int] = 9,
+    series_type: Optional[str] = "close",
+    expand_underlying: Optional[bool] = False,
+    order: Optional[str] = "desc",
+    limit: Optional[int] = 10,
+    timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lt: Optional[Union[str, int, datetime, date]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve the Moving Average Convergence/Divergence (MACD) for a specified ticker over a defined
+    time range. MACD is a momentum indicator derived from two moving averages, helping to identify
+    trend strength, direction, and potential trading signals. Works with both stocks and options.
+
+    Reference (Stocks): https://polygon.io/docs/rest/stocks/technical-indicators/moving-average-convergence-divergence
+    Reference (Options): https://polygon.io/docs/options/get_v1_indicators_macd__optionsticker
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for stocks, "O:SPY241220P00720000" for options)
+    - timestamp: Query by specific timestamp (YYYY-MM-DD format or millisecond timestamp)
+    - timespan: Size of the aggregate time window (minute, hour, day, week, month, quarter, year)
+                Default: "day"
+    - adjusted: Whether aggregates used to calculate MACD are adjusted for splits (default: True)
+                Set to False for unadjusted results
+    - short_window: Short window size used to calculate MACD data (default: 12)
+                    Used for the fast EMA in the MACD calculation
+    - long_window: Long window size used to calculate MACD data (default: 26)
+                   Used for the slow EMA in the MACD calculation
+    - signal_window: Window size used to calculate the MACD signal line (default: 9)
+                     Signal line is the EMA of the MACD line
+    - series_type: Price in the aggregate used to calculate MACD (default: "close")
+                   Options: "close", "open", "high", "low"
+                   e.g., "close" uses closing prices to calculate the MACD
+    - expand_underlying: Whether to include the aggregates used to calculate this indicator in the
+                         response (default: False)
+    - order: Order in which to return results, ordered by timestamp ("asc" or "desc")
+             Default: "desc"
+    - limit: Limit the number of results returned (default: 10, max: 5000)
+    - timestamp_gte: Range by timestamp - greater than or equal to
+    - timestamp_gt: Range by timestamp - greater than
+    - timestamp_lte: Range by timestamp - less than or equal to
+    - timestamp_lt: Range by timestamp - less than
+
+    Response includes:
+    - results.values: Array of objects with MACD indicator data for each timestamp
+      - timestamp: Unix timestamp in milliseconds
+      - value: MACD line value (short_window EMA - long_window EMA)
+      - signal: Signal line value (signal_window EMA of MACD line)
+      - histogram: MACD histogram value (MACD line - signal line)
+    - results.underlying: The underlying aggregates used (if expand_underlying=True)
+      - url: API URL to fetch the underlying aggregate data
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    MACD Calculation:
+    - MACD Line = short_window EMA - long_window EMA (typically 12-day EMA - 26-day EMA)
+    - Signal Line = signal_window EMA of MACD Line (typically 9-day EMA)
+    - Histogram = MACD Line - Signal Line
+
+    Use Cases:
+    - Momentum analysis: Measure the strength and direction of price momentum
+    - Signal generation (crossover events): Identify buy/sell signals from MACD/signal line crosses
+    - Spotting overbought/oversold conditions: Extreme MACD values may indicate reversals
+    - Confirming trend directions: MACD position relative to zero confirms trend direction
+
+    Example: get_macd("AAPL") returns MACD with standard parameters (12, 26, 9) for Apple stock,
+             showing MACD line, signal line, and histogram for momentum analysis
+
+    Example: get_macd("MSFT", short_window=8, long_window=17, signal_window=9) returns custom
+             MACD for Microsoft with faster-responding parameters for short-term trading
+
+    Example: get_macd("AAPL", timespan="day", limit=50, expand_underlying=True) returns 50
+             data points of MACD with the underlying OHLCV data used in calculations
+
+    Example: get_macd("O:SPY241220P00720000", timespan="day") returns MACD for SPY put
+             option premium to identify momentum shifts in option pricing
+
+    Note: MACD considerations and best practices:
+    - Standard parameters: short=12, long=26, signal=9 (known as "12, 26, 9" MACD)
+    - MACD line = 12-day EMA minus 26-day EMA (measures momentum)
+    - Signal line = 9-day EMA of MACD line (triggers trading signals)
+    - Histogram = MACD minus Signal (visualizes convergence/divergence)
+    - Bullish signal: MACD crosses above signal line (histogram turns positive)
+    - Bearish signal: MACD crosses below signal line (histogram turns negative)
+    - Centerline crossover: MACD crossing zero line indicates trend change
+    - Divergence: MACD moving opposite to price can signal trend reversal
+      - Bullish divergence: Price makes lower lows, MACD makes higher lows
+      - Bearish divergence: Price makes higher highs, MACD makes lower highs
+    - Histogram increasing = momentum strengthening in current direction
+    - Histogram decreasing = momentum weakening, potential reversal ahead
+    - For options, track MACD of premium prices to identify volatility expansion/contraction
+    - Faster parameters (e.g., 5, 13, 5) for shorter timeframes and day trading
+    - Use expand_underlying=True to verify price data quality behind calculations
+    - Combine with other indicators (RSI, volume) for confirmation
+    - Use timestamp range parameters (timestamp_gte, timestamp_lt) for specific date ranges
+    """
+    try:
+        # Build params dict for timestamp range filters
+        final_params = {**(params or {})}
+        if timestamp_gte is not None:
+            final_params["timestamp.gte"] = timestamp_gte
+        if timestamp_gt is not None:
+            final_params["timestamp.gt"] = timestamp_gt
+        if timestamp_lte is not None:
+            final_params["timestamp.lte"] = timestamp_lte
+        if timestamp_lt is not None:
+            final_params["timestamp.lt"] = timestamp_lt
+
+        # Build kwargs conditionally to avoid passing empty params
+        kwargs = {
+            "ticker": ticker,
+            "timespan": timespan,
+            "adjusted": adjusted,
+            "short_window": short_window,
+            "long_window": long_window,
+            "signal_window": signal_window,
+            "series_type": series_type,
+            "expand_underlying": expand_underlying,
+            "order": order,
+            "limit": limit,
+            "raw": True,
+        }
+        if timestamp is not None:
+            kwargs["timestamp"] = timestamp
+        if final_params:
+            kwargs["params"] = final_params
+
+        results = polygon_client.get_macd(**kwargs)
+
+        # Parse the response and extract the values array
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data and "values" in data["results"]:
+            # Wrap the values in a results key for consistent CSV formatting
+            formatted_data = {"results": data["results"]["values"]}
+            return json_to_csv(formatted_data)
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_rsi(
+    ticker: str,
+    timestamp: Optional[Union[str, int, datetime, date]] = None,
+    timespan: Optional[str] = "day",
+    adjusted: Optional[bool] = True,
+    window: Optional[int] = 14,
+    series_type: Optional[str] = "close",
+    expand_underlying: Optional[bool] = False,
+    order: Optional[str] = "desc",
+    limit: Optional[int] = 10,
+    timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
+    timestamp_lt: Optional[Union[str, int, datetime, date]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve the Relative Strength Index (RSI) for a specified ticker over a defined time range.
+    The RSI measures the speed and magnitude of price changes, oscillating between 0 and 100 to
+    help identify overbought or oversold conditions. Works with both stocks and options.
+
+    Reference (Stocks): https://polygon.io/docs/rest/stocks/technical-indicators/relative-strength-index
+    Reference (Options): https://polygon.io/docs/options/get_v1_indicators_rsi__optionsticker
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for stocks, "O:SPY241220P00720000" for options)
+    - timestamp: Query by specific timestamp (YYYY-MM-DD format or millisecond timestamp)
+    - timespan: Size of the aggregate time window (minute, hour, day, week, month, quarter, year)
+                Default: "day"
+    - adjusted: Whether aggregates used to calculate RSI are adjusted for splits (default: True)
+                Set to False for unadjusted results
+    - window: Window size used to calculate the relative strength index (default: 14)
+              Standard is 14-period RSI for most applications
+    - series_type: Price in the aggregate used to calculate RSI (default: "close")
+                   Options: "close", "open", "high", "low"
+                   e.g., "close" uses closing prices to calculate the RSI
+    - expand_underlying: Whether to include the aggregates used to calculate this indicator in the
+                         response (default: False)
+    - order: Order in which to return results, ordered by timestamp ("asc" or "desc")
+             Default: "desc"
+    - limit: Limit the number of results returned (default: 10, max: 5000)
+    - timestamp_gte: Range by timestamp - greater than or equal to
+    - timestamp_gt: Range by timestamp - greater than
+    - timestamp_lte: Range by timestamp - less than or equal to
+    - timestamp_lt: Range by timestamp - less than
+
+    Response includes:
+    - results.values: Array of objects with timestamp and RSI value pairs
+      - timestamp: Unix timestamp in milliseconds
+      - value: Calculated RSI value (0-100 scale)
+    - results.underlying: The underlying aggregates used (if expand_underlying=True)
+      - url: API URL to fetch the underlying aggregate data
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    RSI Calculation:
+    - RSI = 100 - (100 / (1 + RS))
+    - RS (Relative Strength) = Average Gain / Average Loss over the window period
+    - Average Gain = Sum of gains over window / window size
+    - Average Loss = Sum of losses over window / window size
+    - RSI oscillates between 0 (extreme weakness) and 100 (extreme strength)
+
+    Use Cases:
+    - Overbought/oversold detection: Identify when prices have moved too far too fast
+    - Divergence analysis: Spot when RSI and price move in opposite directions
+    - Trend confirmation: Validate the strength of existing trends
+    - Refining market entry/exit strategies: Time entries and exits based on momentum extremes
+
+    Example: get_rsi("AAPL") returns 14-day RSI for Apple stock with standard parameters,
+             showing momentum strength on a 0-100 scale
+
+    Example: get_rsi("MSFT", window=9, limit=30) returns 30 data points of 9-day RSI for
+             Microsoft - faster RSI for more responsive signals
+
+    Example: get_rsi("AAPL", window=14, timespan="day", expand_underlying=True) returns
+             14-day RSI with the underlying OHLCV data used in calculations
+
+    Example: get_rsi("O:SPY241220P00720000", window=14, timespan="day") returns 14-day
+             RSI for SPY put option premium to identify overbought/oversold conditions
+
+    Note: RSI considerations and best practices:
+    - Standard window: 14 periods (14-day RSI for daily charts is most common)
+    - RSI ranges: 0 (extreme weakness) to 100 (extreme strength)
+    - Traditional interpretation:
+      * RSI > 70: Overbought condition (potential sell signal or take profits)
+      * RSI < 30: Oversold condition (potential buy signal or mean reversion)
+      * RSI = 50: Neutral momentum (no directional bias)
+      * RSI 40-60: Typical range in sideways markets
+    - Strong trends can keep RSI overbought (>70) or oversold (<30) for extended periods
+      * In strong uptrends, RSI may stay between 40-90
+      * In strong downtrends, RSI may stay between 10-60
+    - Alternative thresholds:
+      * Conservative: 80/20 levels for fewer but stronger signals
+      * Aggressive: 60/40 levels for earlier but more frequent signals
+    - Window variations:
+      * Shorter windows (7-9): More sensitive, more signals, more false positives
+      * Standard window (14): Balanced sensitivity and reliability
+      * Longer windows (21-25): Smoother, stronger confirmation, more lag
+    - Divergence patterns (powerful reversal signals):
+      * Bullish divergence: Price makes lower lows, RSI makes higher lows (reversal up)
+      * Bearish divergence: Price makes higher highs, RSI makes lower highs (reversal down)
+    - Failure swings (advanced patterns):
+      * Bullish: RSI drops below 30, rallies above 30, pulls back but stays above 30, then breaks higher
+      * Bearish: RSI rises above 70, falls below 70, rallies but stays below 70, then breaks lower
+    - For options trading:
+      * Track RSI of option premium to identify extreme pricing
+      * RSI < 30 on premium may indicate oversold conditions for mean reversion
+      * RSI > 70 on premium may indicate overbought conditions or volatility expansion
+    - Combining RSI with other indicators:
+      * RSI + MACD: Confirm momentum and trend direction
+      * RSI + Volume: Validate the strength of RSI signals
+      * RSI + Support/Resistance: Time entries at key levels with RSI confirmation
+    - Use expand_underlying=True to verify price data quality behind calculations
+    - Use timestamp range parameters (timestamp_gte, timestamp_lt) for specific date ranges
+    """
+    try:
+        # Build params dict for timestamp range filters
+        final_params = {**(params or {})}
+        if timestamp_gte is not None:
+            final_params["timestamp.gte"] = timestamp_gte
+        if timestamp_gt is not None:
+            final_params["timestamp.gt"] = timestamp_gt
+        if timestamp_lte is not None:
+            final_params["timestamp.lte"] = timestamp_lte
+        if timestamp_lt is not None:
+            final_params["timestamp.lt"] = timestamp_lt
+
+        # Build kwargs conditionally to avoid passing empty params
+        kwargs = {
+            "ticker": ticker,
+            "timespan": timespan,
+            "adjusted": adjusted,
+            "window": window,
+            "series_type": series_type,
+            "expand_underlying": expand_underlying,
+            "order": order,
+            "limit": limit,
+            "raw": True,
+        }
+        if timestamp is not None:
+            kwargs["timestamp"] = timestamp
+        if final_params:
+            kwargs["params"] = final_params
+
+        results = polygon_client.get_rsi(**kwargs)
+
+        # Parse the response and extract the values array
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data and "values" in data["results"]:
+            # Wrap the values in a results key for consistent CSV formatting
+            formatted_data = {"results": data["results"]["values"]}
+            return json_to_csv(formatted_data)
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_market_holidays(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get upcoming market holidays and their open/close times.
+    Get upcoming market holidays and special market hours (early close days).
+    Returns details about when US stock markets are closed or have modified hours.
+
+    Reference: https://polygon.io/docs/rest/stocks/market-operations/market-holidays
+
+    Returns information about:
+    - Market holiday dates (when markets are closed)
+    - Holiday names
+    - Early close days (when markets close early)
+    - Modified trading hours
+
+    Example: get_market_holidays() returns all upcoming market holidays and special hours
+
+    Note: Useful for planning trading strategies and understanding when markets will be closed.
+    Common US market holidays include New Year's Day, Independence Day, Thanksgiving, and Christmas.
     """
     try:
         results = polygon_client.get_market_holidays(params=params, raw=True)
@@ -504,13 +1539,85 @@ async def list_tickers(
     date: Optional[Union[str, datetime, date]] = None,
     search: Optional[str] = None,
     active: Optional[bool] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
     sort: Optional[str] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Query supported ticker symbols across stocks, indices, forex, and crypto.
+    Retrieve a comprehensive list of ticker symbols supported by Polygon.io across various asset classes.
+    Each ticker entry provides essential details such as symbol, name, market, currency, and active status.
+
+    Reference: https://polygon.io/docs/rest/stocks/tickers/all-tickers
+
+    Essential for asset discovery, data integration, filtering/selection, and application development.
+    Query tickers across stocks, options, indices, forex, and crypto markets with advanced filtering.
+
+    Parameters:
+    - ticker: Specific ticker symbol to query (defaults to all tickers)
+    - type: Filter by ticker type (CS=Common Stock, ETF, ADRC, etc. - see Ticker Types API)
+    - market: Filter by market type (stocks, crypto, fx, otc, indices)
+    - exchange: Primary exchange MIC code (e.g., XNYS, XNAS) per ISO 10383
+    - cusip: CUSIP code of the asset (note: not returned in response due to legal reasons)
+    - cik: CIK code from SEC EDGAR system
+    - date: Point in time to retrieve tickers available on that date (defaults to most recent)
+    - search: Search terms within ticker and/or company name
+    - active: Filter for actively traded tickers (default: None, which returns all)
+    - ticker_gte: Ticker greater than or equal to (lexicographic range)
+    - ticker_gt: Ticker greater than (lexicographic range)
+    - ticker_lte: Ticker less than or equal to (lexicographic range)
+    - ticker_lt: Ticker less than (lexicographic range)
+    - sort: Field to sort by (e.g., "ticker", "name")
+    - order: Sort order ("asc" or "desc")
+    - limit: Number of results to return (default: 10, max: 1000)
+    - params: Additional query parameters
+
+    Example: list_tickers(market="stocks", active=True, limit=100)
+             gets first 100 active stock tickers
+    Example: list_tickers(search="Apple", market="stocks")
+             searches for Apple-related stock tickers
+    Example: list_tickers(type="ETF", active=True, limit=50)
+             gets first 50 active ETFs
+    Example: list_tickers(ticker_gte="A", ticker_lt="B", market="stocks")
+             gets all stock tickers starting with 'A'
+    Example: list_tickers(exchange="XNAS", market="stocks", limit=100)
+             gets first 100 stocks from NASDAQ
+    Example: list_tickers(cik="0001090872")
+             gets tickers for specific CIK (Agilent Technologies)
+
+    Response includes:
+    - ticker: Exchange symbol
+    - name: Asset name (company name for stocks, currency pair for forex/crypto)
+    - market: Market type (stocks, crypto, fx, otc, indices)
+    - type: Asset type (CS, ETF, ADRC, etc.)
+    - active: Whether actively traded (false means delisted)
+    - primary_exchange: ISO code of primary listing exchange
+    - currency_symbol/currency_name: Trading currency (ISO 4217)
+    - base_currency_symbol/base_currency_name: Pricing currency (for forex/crypto)
+    - locale: Asset locale (us, global)
+    - cik: Central Index Key for SEC filings
+    - composite_figi/share_class_figi: OpenFIGI identifiers
+    - last_updated_utc: Data freshness timestamp
+    - delisted_utc: Last trading date (if delisted)
+
+    Note: Ticker listing considerations:
+    - Query by CUSIP is supported but CUSIP not returned in response (legal restrictions)
+    - Default limit is 10, max is 1000 per request
+    - Use pagination (next_url) for large result sets
+    - Active=true filters to currently trading assets only
+    - Date parameter allows historical ticker lookups
+    - Ticker range queries enable efficient alphabetical scanning
+    - Search matches both ticker symbol and company name
+    - Exchange parameter uses Market Identifier Code (MIC) standard
+    - Type values vary by market (use Ticker Types API for complete list)
+
+    Use case: Building a stock screener - query all active US stocks on NASDAQ exchange,
+    then filter by specific criteria like type (CS for common stock, ETF for funds), and
+    use ticker range queries to paginate through results alphabetically for efficient data loading.
     """
     try:
         results = polygon_client.list_tickers(
@@ -522,6 +1629,55 @@ async def list_tickers(
             cik=cik,
             date=date,
             search=search,
+            active=active,
+            sort=sort,
+            order=order,
+            limit=limit,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker.gte": ticker_gte,
+                        "ticker.gt": ticker_gt,
+                        "ticker.lte": ticker_lte,
+                        "ticker.lt": ticker_lt,
+                    }.items()
+                    if v is not None
+                },
+            },
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_all_tickers(
+    market: Optional[str] = None,
+    type: Optional[str] = None,
+    active: Optional[bool] = True,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = "ticker",
+    order: Optional[str] = "asc",
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get all ticker symbols with optional filtering by market type and active status.
+    This is a simplified interface to the Tickers endpoint (https://polygon.io/docs/rest/stocks/tickers/all-tickers).
+
+    Common parameters:
+    - market: Filter by market type (stocks, crypto, fx, otc, indices)
+    - type: Filter by security type (CS=Common Stock, ETF, etc.)
+    - active: Include only active tickers (default: True)
+    - limit: Number of results to return (default: 100)
+    """
+    try:
+        results = polygon_client.list_tickers(
+            market=market,
+            type=type,
             active=active,
             sort=sort,
             order=order,
@@ -542,7 +1698,76 @@ async def get_ticker_details(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get detailed information about a specific ticker.
+    Retrieve comprehensive details for a single ticker supported by Polygon.io. This endpoint offers
+    a deep look into a company's fundamental attributes, including primary exchange, standardized
+    identifiers (CIK, FIGI), market cap, industry classification, and key dates. Also provides
+    branding assets (logos, icons) for visual identification.
+
+    Reference: https://polygon.io/docs/rest/stocks/tickers/ticker-overview
+
+    Essential for company research, data integration, application enhancement, due diligence,
+    and compliance. Provides rich fundamental data and visual assets in a single request.
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL", "MSFT", "GOOGL")
+    - date: Point in time to get ticker information (YYYY-MM-DD, defaults to most recent)
+           When querying SEC filings, this date is compared with the period of report date.
+           For example, an SEC filing submitted 2019-07-31 with period ending 2019-06-29
+           would be returned when querying date=2019-06-29
+    - params: Additional query parameters
+
+    Example: get_ticker_details("AAPL")
+             gets comprehensive Apple Inc. details with latest data
+    Example: get_ticker_details("MSFT", date="2020-01-15")
+             gets Microsoft details as of January 15, 2020
+    Example: get_ticker_details("GOOGL")
+             gets Alphabet/Google details with branding assets
+    Example: get_ticker_details("TSLA")
+             gets Tesla details including market cap, employees, SIC code
+
+    Response includes:
+    - ticker: Exchange symbol (ticker root and suffix if applicable)
+    - name: Company registered name
+    - market: Market type (stocks, crypto, fx, otc, indices)
+    - type: Asset type (CS=Common Stock, ETF, ADRC, etc.)
+    - active: Whether actively traded (false means delisted)
+    - locale: Asset locale (us, global)
+    - primary_exchange: ISO code of primary listing exchange
+    - currency_name: Trading currency
+    - description: Detailed company description and business overview
+    - homepage_url: Company website
+    - list_date: Date symbol was first publicly listed (YYYY-MM-DD)
+    - delisted_utc: Last trading date (if delisted)
+    - address: Headquarters address (address1, city, state, postal_code)
+    - phone_number: Company contact phone
+    - total_employees: Approximate employee count
+    - market_cap: Most recent close price × weighted outstanding shares
+    - share_class_shares_outstanding: Outstanding shares for this class
+    - weighted_shares_outstanding: Total shares assuming all classes converted
+    - round_lot: Standard trading lot size
+    - cik: Central Index Key for SEC filings
+    - composite_figi: Composite OpenFIGI identifier
+    - share_class_figi: Share class OpenFIGI identifier
+    - sic_code: Standard Industrial Classification code
+    - sic_description: SIC code description
+    - branding: Visual assets (logo_url, icon_url) for UI integration
+
+    Note: Ticker details considerations:
+    - Date parameter enables historical company data lookups
+    - SEC filing data aligned with period of report date, not submission date
+    - Branding URLs provide direct access to company logos and icons
+    - Market cap calculated as close price × weighted shares outstanding
+    - SIC codes classify companies by industry (see SEC's SIC Code List)
+    - FIGI codes provide global financial instrument identification
+    - CIK enables SEC EDGAR filing lookups
+    - Weighted shares outstanding accounts for all share class conversions
+    - Description field provides comprehensive business overview
+    - Address and phone enable direct company contact
+
+    Use case: Building a stock research dashboard - fetch ticker details to display company
+    overview with logo, business description, key metrics (market cap, employees), industry
+    classification (SIC), and contact information, all enriched with branding assets for
+    professional presentation.
     """
     try:
         results = polygon_client.get_ticker_details(
@@ -555,16 +1780,418 @@ async def get_ticker_details(
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_related_companies(
+    ticker: str,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve a list of tickers related to a specified ticker, identified through analysis of news
+    coverage and returns data. This endpoint helps users discover peers, competitors, or thematically
+    similar companies, aiding in comparative analysis, portfolio diversification, and market research.
+
+    Reference: https://polygon.io/docs/rest/stocks/tickers/related-tickers
+
+    Essential for peer identification, comparative analysis, portfolio diversification, and market
+    research. Discovers related companies based on news correlation and return patterns.
+
+    Parameters:
+    - ticker: The ticker symbol to search for related companies (e.g., "AAPL", "MSFT", "TSLA")
+    - params: Additional query parameters
+
+    Example: get_related_companies("AAPL")
+             gets companies related to Apple (may include MSFT, GOOGL, AMZN, META, etc.)
+    Example: get_related_companies("TSLA")
+             gets companies related to Tesla (may include RIVN, LCID, F, GM, etc.)
+    Example: get_related_companies("JPM")
+             gets companies related to JPMorgan Chase (other major banks and financial institutions)
+    Example: get_related_companies("NVDA")
+             gets companies related to NVIDIA (other semiconductor and AI chip companies)
+
+    Response includes:
+    - ticker: Related ticker symbol
+    - Results array contains list of related company tickers
+
+    Note: Related companies considerations:
+    - Relationships identified through news coverage analysis
+    - Returns data correlation also contributes to relatedness
+    - Typically returns companies in same sector or industry
+    - May include direct competitors and peer companies
+    - Useful for discovering investment alternatives
+    - Helps identify stocks that move together
+    - Relationship strength varies (no explicit scoring provided)
+    - Results based on recent news and market behavior
+    - Number of results varies by ticker
+    - Useful for building watch lists of similar companies
+    - Aids in sector rotation strategies
+    - Helps identify portfolio concentration risks
+
+    Use case: Building a comparative analysis dashboard - after researching Apple, use this endpoint
+    to discover related tech companies (Microsoft, Google, Amazon, Meta, etc.), then fetch financial
+    metrics and performance data for all related tickers to compare valuations, growth rates, and
+    market positioning across the entire peer group.
+    """
+    try:
+        results = polygon_client.get_related_companies(
+            ticker=ticker, params=params, raw=True
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_ticker_news(
     ticker: Optional[str] = None,
     published_utc: Optional[Union[str, datetime, date]] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    published_utc_gte: Optional[Union[str, datetime, date]] = None,
+    published_utc_gt: Optional[Union[str, datetime, date]] = None,
+    published_utc_lte: Optional[Union[str, datetime, date]] = None,
+    published_utc_lt: Optional[Union[str, datetime, date]] = None,
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
     order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get recent news articles for a stock ticker.
+    Retrieve the most recent news articles related to stocks, featuring summaries, source details,
+    and AI-powered sentiment analysis for informed decision-making.
+
+    This endpoint consolidates relevant financial news in one place, extracting associated tickers,
+    assigning sentiment with reasoning, and providing direct links to original sources. By incorporating
+    publisher information, article metadata, and sentiment insights, users can quickly gauge market
+    sentiment, stay informed on company developments, and integrate news intelligence into trading
+    or research workflows.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/reference/news
+
+    Parameters
+    ----------
+    ticker : str, optional
+        Case-sensitive ticker symbol to filter news.
+        Example: "AAPL" for Apple Inc.
+
+    published_utc : str or date, optional
+        Return results published on, before, or after this date/time.
+        Format: RFC3339 (YYYY-MM-DDTHH:MM:SSZ) or simple date (YYYY-MM-DD)
+        Example: "2024-06-24" or "2024-06-24T18:33:53Z"
+
+    ticker_gte : str, optional
+        Filter ticker greater than or equal to value (lexicographic).
+
+    ticker_gt : str, optional
+        Filter ticker greater than value (lexicographic).
+
+    ticker_lte : str, optional
+        Filter ticker less than or equal to value (lexicographic).
+
+    ticker_lt : str, optional
+        Filter ticker less than value (lexicographic).
+
+    published_utc_gte : str or date, optional
+        Filter published_utc greater than or equal to value.
+        Format: RFC3339 or YYYY-MM-DD
+
+    published_utc_gt : str or date, optional
+        Filter published_utc greater than value.
+        Format: RFC3339 or YYYY-MM-DD
+
+    published_utc_lte : str or date, optional
+        Filter published_utc less than or equal to value.
+        Format: RFC3339 or YYYY-MM-DD
+
+    published_utc_lt : str or date, optional
+        Filter published_utc less than value.
+        Format: RFC3339 or YYYY-MM-DD
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 10, Maximum: 1000
+
+    sort : str, optional
+        Sort field for ordering results.
+        Common: "published_utc"
+
+    order : str, optional
+        Order results based on sort field.
+        Options: "asc" or "desc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing news articles with the following fields:
+
+        Article Metadata:
+        - id: Unique identifier for the article
+        - title: Article title
+        - author: Article author
+        - published_utc: UTC publication date/time (RFC3339 format)
+        - description: Article summary/description
+        - keywords: Associated keywords (array)
+
+        URLs:
+        - article_url: Link to the full news article
+        - amp_url: Mobile-friendly AMP URL
+        - image_url: Article's featured image URL
+
+        Publisher Information:
+        - publisher_name: Publisher name (e.g., "Investing.com")
+        - publisher_homepage_url: Publisher's homepage
+        - publisher_logo_url: Publisher's logo URL
+        - publisher_favicon_url: Publisher's favicon URL
+
+        Tickers:
+        - tickers: Ticker symbols mentioned in article (array)
+
+        Sentiment Insights (per ticker):
+        - insights_ticker: Ticker the insight applies to
+        - insights_sentiment: Sentiment classification (positive, negative, neutral)
+        - insights_sentiment_reasoning: AI-generated explanation for sentiment
+
+    Understanding News Sentiment Analysis
+    -------------------------------------
+    Each article includes AI-powered sentiment analysis with reasoning:
+
+    1. **Sentiment Classifications**:
+       - **Positive**: Bullish news likely to support price increases
+         * Earnings beats, positive guidance, new product launches
+         * Strategic partnerships, market share gains
+         * Analyst upgrades, institutional buying
+       - **Negative**: Bearish news likely to pressure prices
+         * Earnings misses, lowered guidance, product recalls
+         * Legal issues, regulatory challenges
+         * Analyst downgrades, executive departures
+       - **Neutral**: Informational without clear directional bias
+         * Routine announcements, general market commentary
+         * Balanced analysis pieces
+
+    2. **Sentiment Reasoning**:
+       - AI explains why the sentiment was assigned
+       - Highlights key facts driving the sentiment
+       - Ticker-specific analysis when multiple tickers mentioned
+       - Helps validate automated sentiment classification
+
+    3. **Multi-Ticker Articles**:
+       - Single article may mention multiple companies
+       - Each ticker gets individual sentiment + reasoning
+       - Allows sector-wide or comparative analysis
+       - Example: Fed rate decision affects multiple financial stocks
+
+    4. **Publisher Context**:
+       - Source credibility varies by publisher
+       - Major outlets (Bloomberg, Reuters, WSJ) vs aggregators
+       - Publisher logo/favicon helps identify source quality
+       - Homepage URL enables source verification
+
+    Use Cases
+    ---------
+    1. **Market Sentiment Analysis**: Aggregate news sentiment across tickers or sectors
+       to gauge overall market mood and identify sentiment shifts.
+
+    2. **Investment Research**: Stay informed on company-specific developments, earnings,
+       product launches, and strategic initiatives affecting investment decisions.
+
+    3. **Automated Monitoring**: Build news alerts and automated workflows to track
+       specific tickers, keywords, or sentiment patterns for timely decision-making.
+
+    4. **Portfolio Strategy Refinement**: Incorporate news flow and sentiment into trading
+       strategies, risk management, and position sizing decisions.
+
+    Examples
+    --------
+    Example 1: Get latest Apple news with sentiment
+        list_ticker_news(
+            ticker="AAPL",
+            limit=20,
+            order="desc"
+        )
+
+        Returns 20 most recent Apple articles with AI sentiment analysis.
+
+    Example 2: Get Tesla news for specific date range
+        list_ticker_news(
+            ticker="TSLA",
+            published_utc_gte="2025-03-01",
+            published_utc_lte="2025-03-31",
+            order="desc"
+        )
+
+        Returns all Tesla news published in March 2025.
+
+    Example 3: Monitor recent market news across all stocks
+        list_ticker_news(
+            limit=50,
+            order="desc"
+        )
+
+        Returns 50 most recent market news articles without ticker filter.
+
+    Example 4: Track news since specific date for NVIDIA
+        list_ticker_news(
+            ticker="NVDA",
+            published_utc_gte="2025-01-01",
+            order="asc",
+            limit=100
+        )
+
+        Returns NVIDIA news since start of 2025 in chronological order.
+
+    Example 5: Get latest news for multiple tickers (using ticker range)
+        list_ticker_news(
+            ticker_gte="AAPL",
+            ticker_lte="MSFT",
+            limit=100,
+            order="desc"
+        )
+
+        Returns recent news for tickers alphabetically between AAPL and MSFT.
+
+    Notes
+    -----
+    - **Case-Sensitive Ticker**: The ticker parameter is case-sensitive. Use uppercase
+      ticker symbols (e.g., "AAPL" not "aapl") for reliable filtering.
+
+    - **AI Sentiment**: Sentiment analysis is AI-generated and should be validated:
+      * Use sentiment_reasoning to understand the AI's logic
+      * Cross-reference with article description and title
+      * Consider publisher credibility and source
+      * Not a substitute for human analysis on critical decisions
+
+    - **Publication Timestamps**: published_utc uses RFC3339 format with UTC timezone:
+      * Full format: "2024-06-24T18:33:53Z"
+      * Simple format: "2024-06-24" (midnight UTC assumed)
+      * All times in UTC, convert to local as needed
+      * Useful for precise event timing and chronological analysis
+
+    - **Multi-Ticker Articles**: A single article may reference multiple companies:
+      * Each ticker gets separate sentiment analysis in insights array
+      * Tickers array lists all mentioned symbols
+      * Useful for sector analysis and correlation studies
+      * Example: Federal Reserve news affects multiple financial stocks differently
+
+    - **Publisher Information**: Evaluate source credibility:
+      * Major financial outlets: Bloomberg, Reuters, WSJ, CNBC
+      * Aggregators: Investing.com, Yahoo Finance, MarketWatch
+      * Specialist sources: Benzinga, Seeking Alpha
+      * Check publisher homepage_url for legitimacy
+      * Logo/favicon helps quick visual source identification
+
+    - **Keyword Analysis**: keywords array provides topic categorization:
+      * Varies by publisher (not standardized)
+      * Useful for topic clustering and trend analysis
+      * Examples: "earnings", "Federal Reserve", "AI technology"
+      * Can build custom alerts based on keyword patterns
+
+    - **Image URLs**: image_url provides article's featured image:
+      * Useful for visual content in applications
+      * May be null if article has no featured image
+      * Hosted on publisher's CDN or Polygon proxy
+      * Check URL availability before displaying
+
+    - **AMP URLs**: amp_url provides mobile-friendly version:
+      * Accelerated Mobile Pages for fast mobile loading
+      * Useful for mobile app integrations
+      * May not be available for all articles
+      * Falls back to article_url if AMP not available
+
+    - **Article URLs**: Direct links to original source:
+      * Always verify article_url accessibility
+      * Some articles may be paywalled
+      * URLs may expire or change over time
+      * Respect publisher's terms of service
+
+    - **Sorting and Ordering**: Customize result ordering:
+      * sort="published_utc", order="desc" → Latest news first (default)
+      * sort="published_utc", order="asc" → Oldest news first (chronological)
+      * Useful for historical analysis vs real-time monitoring
+
+    - **Limit Constraints**: Balance between coverage and performance:
+      * Default: 10 articles (quick overview)
+      * Max: 1000 articles (comprehensive analysis)
+      * Use pagination (next_url) for larger datasets
+      * Higher limits increase response time
+
+    - **Date Range Filtering**: Effective strategies:
+      * Recent news: published_utc_gte with recent date
+      * Specific event: narrow date range around event
+      * Historical analysis: broader date ranges with pagination
+      * Real-time monitoring: poll with recent timestamp threshold
+
+    - **Sentiment Aggregation**: Build sentiment scores:
+      * Count positive/negative/neutral articles per ticker
+      * Weight by publisher credibility or recency
+      * Track sentiment shifts over time
+      * Compare sentiment to price movements
+
+    - **News Impact Analysis**: Correlate news with market data:
+      * Match published_utc with price/volume data
+      * Measure price reaction to positive/negative news
+      * Identify sentiment-price divergences
+      * Build event-driven trading strategies
+
+    - **Automated Workflows**: Integration patterns:
+      * Poll endpoint periodically for new articles
+      * Filter by sentiment for automated alerts
+      * Store articles in database for historical analysis
+      * Trigger trades or notifications based on keywords/sentiment
+
+    - **Data Freshness**: News is updated continuously:
+      * Articles appear shortly after publication
+      * May have slight delay vs real-time news feeds
+      * Check published_utc for article age
+      * More frequent polling for time-sensitive use cases
+
+    - **Pagination**: For extensive news searches:
+      * Use next_url from response to fetch more results
+      * Maintains query parameters across pages
+      * Iterate until next_url is null
+      * Be mindful of rate limits when paginating
+
+    - **Rate Limits**: Respect API usage limits:
+      * Check your plan's rate limit (requests per minute)
+      * Implement exponential backoff on errors
+      * Cache results when possible
+      * Use date filtering to avoid redundant queries
+
+    - **Quality Filtering**: Build robust news pipelines:
+      * Filter by publisher credibility (whitelist known sources)
+      * Validate sentiment_reasoning makes sense
+      * Remove duplicates (same story from multiple sources)
+      * Check article_url accessibility
+      * Monitor for spam or low-quality sources
+
+    - **Language**: Articles are primarily English:
+      * Some international sources may include non-English content
+      * Check description/title for language identification
+      * Keywords may include non-English terms
+      * Publisher name can indicate language (e.g., "Le Figaro")
+
+    - **Historical Data**: News archive depth varies:
+      * Recent news (days/weeks) most reliable
+      * Historical news (months/years) availability varies
+      * Some publishers may remove old articles
+      * Plan accordingly for backtesting strategies
+
+    - **Ticker Association**: How tickers are extracted:
+      * Automated extraction from article content
+      * May include mentioned companies beyond primary subject
+      * Can result in false positives (unrelated mentions)
+      * Validate ticker relevance with title/description
+      * Use ticker_gte/ticker_lte for range filtering
+
+    - **Insights Structure**: Understanding the insights array:
+      * Array of objects, one per ticker mentioned
+      * Each object: {ticker, sentiment, sentiment_reasoning}
+      * Same ticker may appear multiple times if mentioned in different contexts
+      * Use as starting point, not definitive analysis
     """
     try:
         results = polygon_client.list_ticker_news(
@@ -573,7 +2200,23 @@ async def list_ticker_news(
             limit=limit,
             sort=sort,
             order=order,
-            params=params,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker.gte": ticker_gte,
+                        "ticker.gt": ticker_gt,
+                        "ticker.lte": ticker_lte,
+                        "ticker.lt": ticker_lt,
+                        "published_utc.gte": published_utc_gte,
+                        "published_utc.gt": published_utc_gt,
+                        "published_utc.lte": published_utc_lte,
+                        "published_utc.lt": published_utc_lt,
+                    }.items()
+                    if v is not None
+                },
+            },
             raw=True,
         )
 
@@ -589,7 +2232,74 @@ async def get_ticker_types(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    List all ticker types supported by Polygon.io.
+    Retrieve a list of all ticker types supported by Polygon.io. This endpoint categorizes tickers
+    across asset classes, markets, and instruments, helping users understand the different
+    classifications and their attributes.
+
+    Reference: https://polygon.io/docs/rest/stocks/tickers/ticker-types
+
+    Essential for data classification, filtering mechanisms, educational reference, and system
+    integration. Provides a comprehensive mapping of ticker type codes to descriptions.
+
+    Parameters:
+    - asset_class: Filter by asset class (stocks, options, crypto, fx, indices)
+    - locale: Filter by locale (us, global)
+    - params: Additional query parameters
+
+    Example: get_ticker_types()
+             gets all ticker types across all asset classes and locales
+    Example: get_ticker_types(asset_class="stocks")
+             gets all stock ticker types (CS, ETF, ADRC, etc.)
+    Example: get_ticker_types(asset_class="stocks", locale="us")
+             gets US stock ticker types only
+    Example: get_ticker_types(asset_class="options")
+             gets options ticker types
+    Example: get_ticker_types(locale="global")
+             gets all global ticker types across asset classes
+
+    Response includes:
+    - code: Polygon.io code for this ticker type (e.g., CS, ETF, ADRC)
+    - description: Short description of the ticker type (e.g., "Common Stock")
+    - asset_class: Asset class group (stocks, options, crypto, fx, indices)
+    - locale: Geographical location identifier (us, global)
+
+    Common ticker type codes:
+    Stocks:
+    - CS: Common Stock
+    - ETF: Exchange Traded Fund
+    - ADRC: American Depository Receipt Common
+    - ADRP: American Depository Receipt Preferred
+    - ADRR: American Depository Receipt Rights
+    - ADRW: American Depository Receipt Warrants
+    - CEF: Closed-End Fund
+    - ETS: Exchange Traded Security
+    - PFD: Preferred Stock
+    - REIT: Real Estate Investment Trust
+    - SP: Structured Product
+    - UNIT: Unit
+    - WARRANT: Warrant
+    - RIGHT: Rights
+
+    Options:
+    - CALL: Call Option
+    - PUT: Put Option
+
+    Crypto/FX:
+    - Various currency and coin pair types
+
+    Note: Ticker types considerations:
+    - Ticker types help categorize instruments for filtering and analysis
+    - Each type code is used in the list_tickers endpoint's type parameter
+    - Asset class groups similar instruments (all stock types under "stocks")
+    - Locale distinguishes US vs. global instruments
+    - Type codes are consistent across the Polygon.io platform
+    - Use this endpoint to discover available types for filtering
+    - Types help distinguish between common stock, ETFs, preferred shares, etc.
+    - Essential for building type-specific filters in applications
+
+    Use case: Building a stock screener with type filters - first fetch all stock ticker types
+    to populate a dropdown menu, allowing users to filter by CS (common stocks), ETF (funds),
+    REIT (real estate), or other specific instrument types for targeted analysis.
     """
     try:
         results = polygon_client.get_ticker_types(
@@ -606,11 +2316,135 @@ async def list_splits(
     ticker: Optional[str] = None,
     execution_date: Optional[Union[str, datetime, date]] = None,
     reverse_split: Optional[bool] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    execution_date_gte: Optional[Union[str, datetime, date]] = None,
+    execution_date_gt: Optional[Union[str, datetime, date]] = None,
+    execution_date_lte: Optional[Union[str, datetime, date]] = None,
+    execution_date_lt: Optional[Union[str, datetime, date]] = None,
+    order: Optional[str] = None,
     limit: Optional[int] = 10,
+    sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get historical stock splits.
+    Retrieve historical stock split events, including execution dates and ratio factors, to understand
+    changes in a company's share structure over time. Polygon.io leverages this data for accurate price
+    adjustments in other endpoints, such as the Aggregates API, ensuring that users can access both
+    adjusted and unadjusted views of historical prices for more informed analysis.
+
+    Reference: https://polygon.io/docs/rest/stocks/corporate-actions/splits
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for Apple Inc., "TSLA" for Tesla)
+    - execution_date: Query by execution date (YYYY-MM-DD format) - the date when the split was applied
+    - reverse_split: Query for reverse stock splits (default: not used, returns all splits)
+                     * True = only reverse splits (split_from > split_to, e.g., 1-for-10)
+                     * False = only forward splits (split_to > split_from, e.g., 2-for-1)
+                     * None/not specified = both types
+    - ticker_gte: Range by ticker - greater than or equal to (lexicographic)
+    - ticker_gt: Range by ticker - greater than (lexicographic)
+    - ticker_lte: Range by ticker - less than or equal to (lexicographic)
+    - ticker_lt: Range by ticker - less than (lexicographic)
+    - execution_date_gte: Range by execution_date - greater than or equal to
+    - execution_date_gt: Range by execution_date - greater than
+    - execution_date_lte: Range by execution_date - less than or equal to
+    - execution_date_lt: Range by execution_date - less than
+    - order: Order results based on the sort field ("asc" or "desc")
+    - limit: Limit the number of results returned (default: 10, max: 1000)
+    - sort: Sort field used for ordering (e.g., "execution_date", "ticker")
+
+    Response includes:
+    - results[]: Array of stock split events with:
+      - ticker: Ticker symbol of the stock split
+      - execution_date: Date when the stock split was applied (YYYY-MM-DD)
+      - split_to: First number in the split ratio (e.g., in 2-for-1 split, split_to = 2)
+      - split_from: Second number in the split ratio (e.g., in 2-for-1 split, split_from = 1)
+      - id: Unique identifier for this stock split event
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    Understanding Split Ratios:
+    - Split ratio format: split_to-for-split_from
+    - Forward split (increases shares, decreases price):
+      * split_to > split_from
+      * Example: 2-for-1 split → split_to=2, split_from=1
+      * 100 shares at $100 becomes 200 shares at $50
+    - Reverse split (decreases shares, increases price):
+      * split_from > split_to
+      * Example: 1-for-10 split → split_to=1, split_from=10
+      * 100 shares at $10 becomes 10 shares at $100
+
+    Price Adjustment Calculation:
+    - Adjustment factor = split_to / split_from
+    - Forward split (2-for-1): factor = 2/1 = 2.0
+      * Pre-split price $100 → Post-split adjusted price = $100 / 2.0 = $50
+    - Reverse split (1-for-10): factor = 1/10 = 0.1
+      * Pre-split price $10 → Post-split adjusted price = $10 / 0.1 = $100
+
+    Use Cases:
+    - Historical analysis: Understand how share structure evolved over time
+    - Price adjustments: Apply split factors to calculate adjusted historical prices
+    - Data consistency: Ensure accurate price comparisons across split events
+    - Modeling: Incorporate split effects into valuation and forecasting models
+
+    Example: list_splits() returns recent stock splits with default parameters
+
+    Example: list_splits(ticker="AAPL") returns all historical stock splits for Apple,
+             showing the 4-for-1 split in 2020 and 2-for-1 split in 2005
+
+    Example: list_splits(reverse_split=True, limit=50) returns up to 50 reverse stock
+             splits, useful for identifying struggling companies
+
+    Example: list_splits(execution_date_gte="2020-01-01", execution_date_lte="2024-12-31")
+             returns all stock splits that occurred between 2020 and 2024
+
+    Example: list_splits(ticker_gte="A", ticker_lt="B", execution_date_gte="2023-01-01")
+             returns splits for tickers starting with 'A' that occurred since 2023
+
+    Note: Stock splits considerations and best practices:
+    - Polygon.io uses split data to provide adjusted prices in Aggregates API:
+      * adjusted=True (default) - Historical prices adjusted for all splits
+      * adjusted=False - Raw historical prices without split adjustments
+    - Forward splits (most common):
+      * Companies split when stock price becomes too high
+      * Makes shares more affordable for retail investors
+      * Common ratios: 2-for-1, 3-for-1, 4-for-1, 10-for-1
+      * Example: Apple's 4-for-1 split in August 2020 (split_to=4, split_from=1)
+      * Example: Tesla's 3-for-1 split in August 2022
+    - Reverse splits (less common):
+      * Companies use to boost low stock price
+      * Often signals financial distress or exchange listing requirements
+      * Common ratios: 1-for-5, 1-for-10, 1-for-20
+      * NYSE requires minimum $1 price, NASDAQ requires $1-$5 depending on listing
+      * Use reverse_split=True to filter for potentially distressed companies
+    - Split effects:
+      * Share price changes proportionally (inversely to split ratio)
+      * Number of shares changes proportionally (directly to split ratio)
+      * Market capitalization remains unchanged
+      * Earnings per share (EPS) adjusts proportionally
+      * Historical P/E ratios remain accurate when using adjusted prices
+    - Data accuracy:
+      * Execution_date is when split takes effect (post-split trading begins)
+      * Price adjustments apply retroactively to all pre-split historical data
+      * Important for backtesting strategies and performance analysis
+    - Use cases by role:
+      * Traders: Identify splits that may create short-term volatility or liquidity changes
+      * Analysts: Adjust historical data for accurate trend analysis
+      * Quants: Incorporate split factors in backtesting algorithms
+      * Investors: Understand share structure changes for long-term holdings
+    - Filtering strategies:
+      * Use ticker ranges to scan alphabetically (ticker_gte="A", ticker_lt="B")
+      * Use execution_date ranges for time-period analysis
+      * Filter reverse_split=True to identify companies facing price pressure
+      * Sort by execution_date to see chronological split history
+    - Integration with other endpoints:
+      * Aggregates API uses split data for adjusted prices
+      * Ticker Details shows current shares_outstanding (post-split)
+      * Compare pre-split and post-split data using adjusted parameter
     """
     try:
         results = polygon_client.list_splits(
@@ -618,7 +2452,25 @@ async def list_splits(
             execution_date=execution_date,
             reverse_split=reverse_split,
             limit=limit,
-            params=params,
+            sort=sort,
+            order=order,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker.gte": ticker_gte,
+                        "ticker.gt": ticker_gt,
+                        "ticker.lte": ticker_lte,
+                        "ticker.lt": ticker_lt,
+                        "execution_date.gte": execution_date_gte,
+                        "execution_date.gt": execution_date_gt,
+                        "execution_date.lte": execution_date_lte,
+                        "execution_date.lt": execution_date_lt,
+                    }.items()
+                    if v is not None
+                },
+            },
             raw=True,
         )
 
@@ -631,25 +2483,481 @@ async def list_splits(
 async def list_dividends(
     ticker: Optional[str] = None,
     ex_dividend_date: Optional[Union[str, datetime, date]] = None,
+    record_date: Optional[Union[str, datetime, date]] = None,
+    declaration_date: Optional[Union[str, datetime, date]] = None,
+    pay_date: Optional[Union[str, datetime, date]] = None,
     frequency: Optional[int] = None,
+    cash_amount: Optional[float] = None,
     dividend_type: Optional[str] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    ex_dividend_date_gte: Optional[Union[str, datetime, date]] = None,
+    ex_dividend_date_gt: Optional[Union[str, datetime, date]] = None,
+    ex_dividend_date_lte: Optional[Union[str, datetime, date]] = None,
+    ex_dividend_date_lt: Optional[Union[str, datetime, date]] = None,
+    record_date_gte: Optional[Union[str, datetime, date]] = None,
+    record_date_gt: Optional[Union[str, datetime, date]] = None,
+    record_date_lte: Optional[Union[str, datetime, date]] = None,
+    record_date_lt: Optional[Union[str, datetime, date]] = None,
+    declaration_date_gte: Optional[Union[str, datetime, date]] = None,
+    declaration_date_gt: Optional[Union[str, datetime, date]] = None,
+    declaration_date_lte: Optional[Union[str, datetime, date]] = None,
+    declaration_date_lt: Optional[Union[str, datetime, date]] = None,
+    pay_date_gte: Optional[Union[str, datetime, date]] = None,
+    pay_date_gt: Optional[Union[str, datetime, date]] = None,
+    pay_date_lte: Optional[Union[str, datetime, date]] = None,
+    pay_date_lt: Optional[Union[str, datetime, date]] = None,
+    cash_amount_gte: Optional[float] = None,
+    cash_amount_gt: Optional[float] = None,
+    cash_amount_lte: Optional[float] = None,
+    cash_amount_lt: Optional[float] = None,
+    order: Optional[str] = None,
     limit: Optional[int] = 10,
+    sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get historical cash dividends.
+    Retrieve a historical record of cash dividend distributions for a given ticker, including declaration,
+    ex-dividend, record, and pay dates, as well as payout amounts and frequency. This endpoint consolidates
+    key dividend information, enabling users to account for dividend income in returns, develop dividend-
+    focused strategies, and support tax reporting needs.
+
+    Reference: https://polygon.io/docs/rest/stocks/corporate-actions/dividends
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "AAPL" for Apple Inc., "MSFT" for Microsoft)
+    - ex_dividend_date: Query by ex-dividend date (YYYY-MM-DD) - date stock trades without dividend
+    - record_date: Query by record date (YYYY-MM-DD) - date stock must be held to receive dividend
+    - declaration_date: Query by declaration date (YYYY-MM-DD) - date dividend was announced
+    - pay_date: Query by pay date (YYYY-MM-DD) - date dividend is paid out
+    - frequency: Query by dividend payment frequency:
+      * 0 = One-time (special dividend)
+      * 1 = Annually
+      * 2 = Bi-annually (twice per year)
+      * 4 = Quarterly
+      * 12 = Monthly
+      * 24 = Bi-monthly
+      * 52 = Weekly
+    - cash_amount: Query by exact cash amount of dividend per share
+    - dividend_type: Query by dividend type:
+      * "CD" = Cash Dividend (regular, expected on consistent schedules)
+      * "SC" = Special Cash (infrequent, unusual, not expected to recur)
+      * "LT" = Long-Term capital gain distribution
+      * "ST" = Short-Term capital gain distribution
+    - ticker_gte: Range by ticker - greater than or equal to (lexicographic)
+    - ticker_gt: Range by ticker - greater than (lexicographic)
+    - ticker_lte: Range by ticker - less than or equal to (lexicographic)
+    - ticker_lt: Range by ticker - less than (lexicographic)
+    - ex_dividend_date_gte: Range by ex_dividend_date - greater than or equal to
+    - ex_dividend_date_gt: Range by ex_dividend_date - greater than
+    - ex_dividend_date_lte: Range by ex_dividend_date - less than or equal to
+    - ex_dividend_date_lt: Range by ex_dividend_date - less than
+    - record_date_gte: Range by record_date - greater than or equal to
+    - record_date_gt: Range by record_date - greater than
+    - record_date_lte: Range by record_date - less than or equal to
+    - record_date_lt: Range by record_date - less than
+    - declaration_date_gte: Range by declaration_date - greater than or equal to
+    - declaration_date_gt: Range by declaration_date - greater than
+    - declaration_date_lte: Range by declaration_date - less than or equal to
+    - declaration_date_lt: Range by declaration_date - less than
+    - pay_date_gte: Range by pay_date - greater than or equal to
+    - pay_date_gt: Range by pay_date - greater than
+    - pay_date_lte: Range by pay_date - less than or equal to
+    - pay_date_lt: Range by pay_date - less than
+    - cash_amount_gte: Range by cash_amount - greater than or equal to
+    - cash_amount_gt: Range by cash_amount - greater than
+    - cash_amount_lte: Range by cash_amount - less than or equal to
+    - cash_amount_lt: Range by cash_amount - less than
+    - order: Order results based on the sort field ("asc" or "desc")
+    - limit: Limit the number of results returned (default: 10, max: 1000)
+    - sort: Sort field used for ordering (e.g., "ex_dividend_date", "pay_date")
+
+    Response includes:
+    - results[]: Array of dividend events with:
+      - ticker: Ticker symbol of the dividend
+      - cash_amount: Cash amount of the dividend per share owned
+      - currency: Currency in which the dividend is paid
+      - declaration_date: Date dividend was announced by the company
+      - ex_dividend_date: Date stock first trades without dividend (set by exchange)
+      - record_date: Date stock must be held to receive dividend (set by company)
+      - pay_date: Date dividend is paid out to shareholders
+      - frequency: Number of times per year dividend is paid (0, 1, 2, 4, 12, 24, 52)
+      - dividend_type: Type of dividend (CD, SC, LT, ST)
+      - id: Unique identifier for this dividend event
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    Understanding Dividend Dates:
+    1. Declaration Date: Company announces the dividend
+    2. Ex-Dividend Date: Stock trades "ex-dividend" (without dividend)
+       - Must own shares BEFORE this date to receive dividend
+       - Stock price typically drops by dividend amount on this date
+    3. Record Date: Ownership recorded (usually 2 business days after ex-date)
+    4. Pay Date: Dividend payment distributed to shareholders
+
+    Date Timeline Example:
+    - Declaration: Oct 28, 2021 (company announces $0.22 dividend)
+    - Ex-Dividend: Nov 5, 2021 (must buy before Nov 5 to get dividend)
+    - Record: Nov 8, 2021 (ownership recorded)
+    - Pay: Nov 11, 2021 (dividend paid out)
+
+    Use Cases:
+    - Income analysis: Calculate dividend income for portfolio holdings
+    - Total return calculations: Include dividends in investment return metrics
+    - Dividend strategies: Screen for dividend growth, yield, consistency
+    - Tax planning: Organize dividend income for tax reporting and qualified dividend treatment
+
+    Example: list_dividends(ticker="AAPL") returns all historical Apple dividends with
+             payment details, showing consistent quarterly CD dividends
+
+    Example: list_dividends(frequency=4, cash_amount_gte=1.0, limit=100) returns up to
+             100 quarterly dividends with payout of $1 or more per share
+
+    Example: list_dividends(ticker="MSFT", ex_dividend_date_gte="2023-01-01",
+             ex_dividend_date_lte="2023-12-31") returns Microsoft dividends with
+             ex-dates in 2023 for annual tax reporting
+
+    Example: list_dividends(dividend_type="SC", limit=50) returns up to 50 special cash
+             dividends that are unusual or one-time events
+
+    Example: list_dividends(ticker_gte="A", ticker_lt="B", frequency=4) returns
+             quarterly dividends for all tickers starting with 'A'
+
+    Note: Dividend considerations and best practices:
+    - Dividend Types:
+      * CD (Cash Dividend) - Regular, recurring dividends paid on consistent schedules
+        - Most common type for established companies
+        - Expected to continue in future based on historical pattern
+      * SC (Special Cash) - One-time or irregular special dividends
+        - Infrequent, unusual distributions
+        - Cannot be expected to recur
+        - Often from asset sales, windfalls, or excess cash
+      * LT/ST (Capital Gains) - For funds/REITs distributing capital gains
+        - LT = Long-term capital gain distributions (held > 1 year)
+        - ST = Short-term capital gain distributions (held ≤ 1 year)
+
+    - Frequency Analysis:
+      * 0 (one-time) - Special dividends, non-recurring
+      * 1 (annually) - Once per year, common for small-cap or international stocks
+      * 4 (quarterly) - Most common for U.S. stocks, paid every 3 months
+      * 12 (monthly) - REITs, income-focused stocks
+      * Higher frequencies (24, 52) - Rare, specialized securities
+
+    - Important Date Rules:
+      * Ex-dividend date is T+1 (trade date + 1 business day) before record date
+      * To receive dividend: Must own shares by market close BEFORE ex-dividend date
+      * Stock price adjustment: Price drops by ~dividend amount on ex-dividend date
+      * Dividend capture strategy: Buy before ex-date, sell after (risky due to price drop)
+
+    - Dividend Yield Calculation:
+      * Annual Dividend Yield = (Annual Dividend Per Share / Stock Price) × 100%
+      * If frequency=4 and cash_amount=$0.25: Annual dividend = $0.25 × 4 = $1.00
+      * If stock price = $50: Yield = ($1.00 / $50) × 100% = 2.0%
+
+    - Tax Implications:
+      * Qualified Dividends: Lower tax rate (0%, 15%, or 20%) if held > 60 days
+      * Ordinary Dividends: Taxed at income tax rates
+      * Pay_date typically determines which tax year dividend counts for
+      * Track ex_dividend_date for holding period requirements
+
+    - Dividend Screening Strategies:
+      * Dividend Growth: Compare current vs. historical cash_amount
+      * High Yield: Filter by cash_amount_gte for minimum payout
+      * Consistency: Check frequency=4 for regular quarterly payers
+      * Special Opportunities: Filter dividend_type="SC" for unusual payouts
+
+    - Portfolio Analysis:
+      * Use ex_dividend_date ranges to get annual dividend income
+      * Calculate total return = price appreciation + dividend income
+      * Track pay_dates for cash flow planning
+      * Monitor frequency changes (quarterly → annual may signal trouble)
+
+    - Data Quality:
+      * Declaration_date to pay_date typically spans 2-4 weeks
+      * Ex_dividend_date usually 2 business days before record_date (T+1 settlement)
+      * Currency field shows payout currency (USD for U.S. stocks)
+      * Historical data enables dividend growth rate calculations
+
+    - Integration with other data:
+      * Combine with stock price to calculate dividend yield
+      * Compare with earnings to determine payout ratio
+      * Use with split data for accurate historical dividend adjustments
+      * Aggregate by year for tax reporting
+
+    - Common Filtering Patterns:
+      * Annual income: ex_dividend_date_gte="2024-01-01", ex_dividend_date_lte="2024-12-31"
+      * High payers: cash_amount_gte=1.0, frequency=4 (quarterly $1+ dividends)
+      * Special dividends: dividend_type="SC" (one-time bonuses)
+      * Ticker scan: ticker_gte="A", ticker_lt="B" (alphabetical range)
+      * Recent payments: pay_date_gte="2024-01-01", sort="pay_date", order="desc"
     """
     try:
         results = polygon_client.list_dividends(
             ticker=ticker,
             ex_dividend_date=ex_dividend_date,
+            record_date=record_date,
+            declaration_date=declaration_date,
+            pay_date=pay_date,
             frequency=frequency,
+            cash_amount=cash_amount,
             dividend_type=dividend_type,
             limit=limit,
+            sort=sort,
+            order=order,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker.gte": ticker_gte,
+                        "ticker.gt": ticker_gt,
+                        "ticker.lte": ticker_lte,
+                        "ticker.lt": ticker_lt,
+                        "ex_dividend_date.gte": ex_dividend_date_gte,
+                        "ex_dividend_date.gt": ex_dividend_date_gt,
+                        "ex_dividend_date.lte": ex_dividend_date_lte,
+                        "ex_dividend_date.lt": ex_dividend_date_lt,
+                        "record_date.gte": record_date_gte,
+                        "record_date.gt": record_date_gt,
+                        "record_date.lte": record_date_lte,
+                        "record_date.lt": record_date_lt,
+                        "declaration_date.gte": declaration_date_gte,
+                        "declaration_date.gt": declaration_date_gt,
+                        "declaration_date.lte": declaration_date_lte,
+                        "declaration_date.lt": declaration_date_lt,
+                        "pay_date.gte": pay_date_gte,
+                        "pay_date.gt": pay_date_gt,
+                        "pay_date.lte": pay_date_lte,
+                        "pay_date.lt": pay_date_lt,
+                        "cash_amount.gte": cash_amount_gte,
+                        "cash_amount.gt": cash_amount_gt,
+                        "cash_amount.lte": cash_amount_lte,
+                        "cash_amount.lt": cash_amount_lt,
+                    }.items()
+                    if v is not None
+                },
+            },
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_ticker_events(
+    ticker: str,
+    types: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve a unified, paginated timeline of corporate events for a ticker, including dividends,
+    stock splits, and earnings, with optional event type filtering.
+
+    This endpoint provides a comprehensive, chronological view of all significant corporate actions
+    and events affecting a security in a single call, making it ideal for analyzing the complete
+    event history and understanding the context of corporate actions.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/corporate-actions/ticker-events
+
+    Parameters
+    ----------
+    ticker : str, required
+        The ticker symbol to retrieve events for.
+        Examples: "AAPL", "MSFT", "TSLA"
+
+    types : str, optional
+        Filter by specific event types. Accepts comma-separated values.
+        Available types:
+        - "dividend": Cash dividend distributions
+        - "split": Stock split events
+        - "earnings": Earnings releases
+        Default: Returns all event types if not specified
+        Examples:
+        - "dividend" → Only dividend events
+        - "dividend,split" → Dividends and splits only
+        - "earnings" → Only earnings events
+
+    params : dict, optional
+        Additional query parameters for advanced filtering and pagination.
+        Common parameters:
+        - limit (int): Maximum number of results (default: 10, max: varies by plan)
+        - sort (str): Sort field and direction (e.g., "event_date", "event_date.desc")
+        - order (str): "asc" or "desc" for result ordering
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing the unified event timeline with columns varying by event type.
+
+        Common fields for all events:
+        - ticker: The ticker symbol
+        - name: Company name
+        - event_type: Type of event (dividend, split, earnings)
+        - event_date: Date of the event
+
+        Dividend-specific fields:
+        - cash_amount: Dividend amount per share
+        - declaration_date: Date dividend was announced
+        - ex_dividend_date: First date trading without dividend
+        - record_date: Date to be on record for dividend
+        - pay_date: Date dividend is paid
+        - frequency: Payment frequency (0=one-time, 1=annual, 4=quarterly, 12=monthly)
+        - dividend_type: Type of dividend (CD=cash, SC=stock, LT=long-term capital gains, ST=short-term capital gains)
+
+        Split-specific fields:
+        - execution_date: Date the split takes effect
+        - split_from: Original share count in ratio
+        - split_to: New share count in ratio
+
+        Earnings-specific fields:
+        - fiscal_period: Reporting period (Q1, Q2, Q3, Q4, FY)
+        - fiscal_year: Fiscal year
+
+    Understanding the Unified Timeline
+    -----------------------------------
+    This endpoint aggregates events from multiple sources into a single chronological view:
+
+    1. **Event Types**:
+       - Dividends: Track income distributions and payment schedules
+       - Splits: Monitor share structure changes and price adjustments
+       - Earnings: Follow quarterly and annual financial reporting
+
+    2. **Timeline Benefits**:
+       - Single API call for complete corporate action history
+       - Chronological ordering reveals event patterns and sequences
+       - Simplified correlation between different event types
+       - Comprehensive view for fundamental analysis
+
+    3. **Event Filtering**:
+       - Filter by single type for focused analysis
+       - Combine multiple types to see relationships (e.g., dividends + splits)
+       - Omit types parameter for complete event history
+
+    Use Cases
+    ---------
+    1. **Corporate Action Analysis**: Review complete history of dividends, splits, and earnings
+       to understand company actions and shareholder value creation patterns.
+
+    2. **Event Impact Studies**: Correlate different event types (e.g., dividend increases after
+       strong earnings) to identify patterns in corporate decision-making.
+
+    3. **Timeline Construction**: Build comprehensive timelines for research reports, presentations,
+       or investor relations materials showing all major company milestones.
+
+    4. **Automated Monitoring**: Track upcoming and historical events for portfolio holdings to
+       stay informed about corporate actions affecting investments.
+
+    Examples
+    --------
+    Example 1: Get all events for Apple
+        get_ticker_events(ticker="AAPL")
+
+        Returns comprehensive timeline including all dividends, splits, and earnings for AAPL,
+        sorted chronologically.
+
+    Example 2: Get only dividend and split events for Microsoft
+        get_ticker_events(
+            ticker="MSFT",
+            types="dividend,split"
+        )
+
+        Returns only cash dividend distributions and stock split events, excluding earnings.
+        Useful for analyzing shareholder return actions.
+
+    Example 3: Get recent earnings events for Tesla
+        get_ticker_events(
+            ticker="TSLA",
+            types="earnings"
+        )
+
+        Returns earnings release events only, showing fiscal periods and reporting dates.
+        Ideal for tracking quarterly and annual financial reporting schedule.
+
+    Example 4: Get limited number of recent events with custom sorting
+        get_ticker_events(
+            ticker="GOOGL",
+            params={
+                "limit": 20,
+                "sort": "event_date.desc",
+                "order": "desc"
+            }
+        )
+
+        Returns 20 most recent events in descending chronological order, showing latest
+        corporate actions first.
+
+    Example 5: Analyze dividend history specifically
+        get_ticker_events(
+            ticker="KO",
+            types="dividend",
+            params={"limit": 50}
+        )
+
+        Returns up to 50 dividend events for Coca-Cola, useful for analyzing dividend
+        growth, consistency, and payment patterns over time.
+
+    Notes
+    -----
+    - **Unified View**: This endpoint consolidates data from multiple specialized endpoints
+      (list_dividends, list_splits, earnings) into a single timeline, simplifying analysis
+      of corporate action patterns and sequences.
+
+    - **Event Type Filtering**: The types parameter accepts single values ("dividend") or
+      comma-separated combinations ("dividend,split,earnings"). Omitting types returns all
+      event types.
+
+    - **Chronological Ordering**: Events are returned in chronological order by default,
+      making it easy to see the sequence and timing of corporate actions. Use sort and
+      order parameters for custom ordering.
+
+    - **Variable Response Structure**: Response fields vary depending on event types returned.
+      Dividend events include payment dates and amounts, splits include ratios, and earnings
+      include fiscal periods.
+
+    - **Pagination**: Results are paginated. Use limit parameter to control page size and
+      next_url field in response metadata for retrieving subsequent pages of large result sets.
+
+    - **Event Dates**: Different event types use different date fields (ex_dividend_date for
+      dividends, execution_date for splits, event_date for earnings). When analyzing timelines,
+      pay attention to which date field is relevant for each event type.
+
+    - **Corporate Action Correlation**: This endpoint is particularly valuable for correlating
+      different types of corporate actions. For example, analyzing whether dividend increases
+      follow strong earnings, or whether splits occur during specific market conditions.
+
+    - **Historical Analysis**: Combine this endpoint with price and volume data to study the
+      market impact of different corporate actions and events over time.
+
+    - **Data Completeness**: Event availability depends on data source coverage. Recent events
+      are most complete; historical data coverage may vary by ticker and event type.
+
+    - **Comparison with Specialized Endpoints**: While this endpoint provides a unified timeline,
+      specialized endpoints (list_dividends, list_splits) offer more detailed filtering and
+      search capabilities. Use this endpoint for timeline views and specialized endpoints for
+      detailed queries.
+    """
+    try:
+        results = polygon_client.get_ticker_events(
+            ticker=ticker,
+            types=types,
             params=params,
             raw=True,
         )
 
+        # Parse the response and extract the events array
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data and "events" in data["results"]:
+            # Wrap the events in a results key for consistent CSV formatting
+            formatted_data = {"results": data["results"]["events"]}
+            return json_to_csv(formatted_data)
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
@@ -664,7 +2972,23 @@ async def list_conditions(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    List conditions used by Polygon.io.
+    List all condition codes used by Polygon.io for trades and quotes.
+    Condition codes provide additional context about trades and quotes (e.g., extended hours, odd lot).
+
+    Reference: https://polygon.io/docs/rest/stocks/market-operations/condition-codes
+
+    Parameters:
+    - asset_class: Filter by asset class (stocks, options, crypto, fx)
+    - data_type: Filter by data type (trade, quote, bbo)
+    - id: Filter by specific condition ID
+    - sip: Filter by SIP (CTA, UTP, OPRA)
+
+    Example: list_conditions() returns all condition codes
+    Example: list_conditions(asset_class="stocks", data_type="trade") returns stock trade conditions
+    Example: list_conditions(id=1) returns details for condition code 1
+
+    Note: Condition codes are essential for understanding trade and quote characteristics.
+    Common examples include codes for extended hours trading, odd lots, and various execution venues.
     """
     try:
         results = polygon_client.list_conditions(
@@ -688,7 +3012,19 @@ async def get_exchanges(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    List exchanges known by Polygon.io.
+    List all known stock exchanges and their properties.
+    Returns exchange details including name, type, MIC (Market Identifier Code), and operating status.
+
+    Reference: https://polygon.io/docs/rest/stocks/market-operations/exchanges
+
+    Parameters:
+    - asset_class: Filter by asset class (stocks, options, crypto, fx)
+    - locale: Filter by locale (us, global)
+
+    Example: get_exchanges() returns all known exchanges
+    Example: get_exchanges(asset_class="stocks", locale="us") returns US stock exchanges
+
+    Note: MIC (Market Identifier Code) is a unique identifier for each exchange (e.g., XNYS for NYSE).
     """
     try:
         results = polygon_client.get_exchanges(
@@ -725,7 +3061,32 @@ async def list_stock_financials(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get fundamental financial data for companies.
+    Get fundamental financial data for companies including balance sheets, income statements, and cash flow statements.
+    Returns comprehensive financial data from SEC filings (10-K, 10-Q).
+
+    Reference: https://polygon.io/docs/rest/stocks/fundamentals/balance-sheets
+
+    Parameters:
+    - ticker: Filter by ticker symbol (e.g., "AAPL", "MSFT")
+    - cik: Filter by SEC Central Index Key (CIK)
+    - company_name: Filter by exact company name
+    - company_name_search: Search by partial company name
+    - sic: Filter by Standard Industrial Classification (SIC) code
+    - filing_date: Filter by exact filing date (YYYY-MM-DD)
+    - filing_date_lt/lte/gt/gte: Range filters for filing date
+    - period_of_report_date: Filter by exact period end date
+    - period_of_report_date_lt/lte/gt/gte: Range filters for period end date
+    - timeframe: Filter by timeframe (annual, quarterly, ttm)
+    - include_sources: Include source URLs for the data
+    - limit: Number of results to return (default: 10)
+    - sort/order: Sorting options
+
+    Example: list_stock_financials(ticker="AAPL") returns Apple's financial statements
+    Example: list_stock_financials(ticker="MSFT", timeframe="annual") returns annual financials
+    Example: list_stock_financials(ticker="GOOGL", limit=4) returns 4 most recent filings
+
+    Note: Returns balance sheet (assets, liabilities, equity), income statement (revenue, expenses, profit),
+    and cash flow statement (operating, investing, financing activities) data from SEC filings.
     """
     try:
         results = polygon_client.vx.list_stock_financials(
@@ -759,8 +3120,2139 @@ async def list_stock_financials(
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_financials_balance_sheets(
+    cik: Optional[str] = None,
+    tickers: Optional[str] = None,
+    period_end: Optional[Union[str, datetime, date]] = None,
+    filing_date: Optional[Union[str, datetime, date]] = None,
+    fiscal_year: Optional[int] = None,
+    fiscal_quarter: Optional[int] = None,
+    timeframe: Optional[str] = None,
+    cik_any_of: Optional[str] = None,
+    cik_gt: Optional[str] = None,
+    cik_gte: Optional[str] = None,
+    cik_lt: Optional[str] = None,
+    cik_lte: Optional[str] = None,
+    tickers_all_of: Optional[str] = None,
+    tickers_any_of: Optional[str] = None,
+    period_end_gt: Optional[Union[str, datetime, date]] = None,
+    period_end_gte: Optional[Union[str, datetime, date]] = None,
+    period_end_lt: Optional[Union[str, datetime, date]] = None,
+    period_end_lte: Optional[Union[str, datetime, date]] = None,
+    filing_date_gt: Optional[Union[str, datetime, date]] = None,
+    filing_date_gte: Optional[Union[str, datetime, date]] = None,
+    filing_date_lt: Optional[Union[str, datetime, date]] = None,
+    filing_date_lte: Optional[Union[str, datetime, date]] = None,
+    fiscal_year_gt: Optional[int] = None,
+    fiscal_year_gte: Optional[int] = None,
+    fiscal_year_lt: Optional[int] = None,
+    fiscal_year_lte: Optional[int] = None,
+    fiscal_quarter_gt: Optional[int] = None,
+    fiscal_quarter_gte: Optional[int] = None,
+    fiscal_quarter_lt: Optional[int] = None,
+    fiscal_quarter_lte: Optional[int] = None,
+    timeframe_any_of: Optional[str] = None,
+    timeframe_gt: Optional[str] = None,
+    timeframe_gte: Optional[str] = None,
+    timeframe_lt: Optional[str] = None,
+    timeframe_lte: Optional[str] = None,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve comprehensive balance sheet data for public companies, containing quarterly and annual
+    financial positions with detailed asset, liability, and equity breakdowns from SEC filings.
+
+    Balance sheets represent point-in-time snapshots of a company's financial position, showing what
+    the company owns (assets), owes (liabilities), and shareholders' equity at specific period end
+    dates. This data is sourced from official SEC filings (10-K for annual, 10-Q for quarterly).
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/balance-sheets
+
+    Parameters
+    ----------
+    cik : str, optional
+        The company's Central Index Key (CIK), a unique identifier assigned by the SEC.
+        Example: "0000320193" for Apple Inc.
+        Look up CIKs at: https://www.sec.gov/search-filings/cik-lookup
+
+    tickers : str, optional
+        Filter for arrays that contain the ticker value.
+        Example: "AAPL"
+
+    period_end : str or date, optional
+        The last date of the reporting period (point-in-time snapshot date).
+        Format: "YYYY-MM-DD"
+        Example: "2025-06-28" for Apple's Q3 2025
+
+    filing_date : str or date, optional
+        The date when the financial statement was filed with the SEC.
+        Format: "YYYY-MM-DD"
+        Example: "2025-08-01"
+
+    fiscal_year : int, optional
+        The fiscal year for the reporting period.
+        Example: 2025
+
+    fiscal_quarter : int, optional
+        The fiscal quarter number (1, 2, 3, or 4).
+        Example: 3 for Q3
+
+    timeframe : str, optional
+        The reporting period type.
+        Options: "quarterly", "annual"
+
+    cik_any_of : str, optional
+        Filter equal to any of the CIK values (comma-separated).
+        Example: "0000320193,0000789019" for Apple and Microsoft
+
+    cik_gt : str, optional
+        Filter CIK greater than the value (lexicographic comparison).
+
+    cik_gte : str, optional
+        Filter CIK greater than or equal to the value.
+
+    cik_lt : str, optional
+        Filter CIK less than the value.
+
+    cik_lte : str, optional
+        Filter CIK less than or equal to the value.
+
+    tickers_all_of : str, optional
+        Filter for arrays that contain all of the ticker values (comma-separated).
+        Example: "AAPL,AAPL.O" requires both tickers present
+
+    tickers_any_of : str, optional
+        Filter for arrays that contain any of the ticker values (comma-separated).
+        Example: "AAPL,MSFT" matches either ticker
+
+    period_end_gt : str or date, optional
+        Filter period end date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_gte : str or date, optional
+        Filter period end date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lt : str or date, optional
+        Filter period end date less than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lte : str or date, optional
+        Filter period end date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gt : str or date, optional
+        Filter filing date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gte : str or date, optional
+        Filter filing date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lt : str or date, optional
+        Filter filing date less than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lte : str or date, optional
+        Filter filing date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    fiscal_year_gt : int, optional
+        Filter fiscal year greater than the value.
+
+    fiscal_year_gte : int, optional
+        Filter fiscal year greater than or equal to the value.
+
+    fiscal_year_lt : int, optional
+        Filter fiscal year less than the value.
+
+    fiscal_year_lte : int, optional
+        Filter fiscal year less than or equal to the value.
+
+    fiscal_quarter_gt : int, optional
+        Filter fiscal quarter greater than the value.
+
+    fiscal_quarter_gte : int, optional
+        Filter fiscal quarter greater than or equal to the value.
+
+    fiscal_quarter_lt : int, optional
+        Filter fiscal quarter less than the value.
+
+    fiscal_quarter_lte : int, optional
+        Filter fiscal quarter less than or equal to the value.
+
+    timeframe_any_of : str, optional
+        Filter equal to any of the timeframe values (comma-separated).
+        Example: "quarterly,annual"
+
+    timeframe_gt : str, optional
+        Filter timeframe greater than the value (lexicographic).
+
+    timeframe_gte : str, optional
+        Filter timeframe greater than or equal to the value.
+
+    timeframe_lt : str, optional
+        Filter timeframe less than the value.
+
+    timeframe_lte : str, optional
+        Filter timeframe less than or equal to the value.
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 100, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "period_end.desc"
+        Example: "period_end.asc,fiscal_year.desc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing balance sheet data with the following key fields:
+
+        Identification:
+        - cik: SEC Central Index Key
+        - tickers: Array of ticker symbols
+        - period_end: Balance sheet snapshot date
+        - filing_date: SEC filing date
+        - fiscal_year: Fiscal year
+        - fiscal_quarter: Fiscal quarter (1-4)
+        - timeframe: "quarterly" or "annual"
+
+        Assets (what the company owns):
+        - total_assets: Sum of all assets
+        - total_current_assets: Assets convertible to cash within one year
+        - cash_and_equivalents: Cash and highly liquid investments
+        - short_term_investments: Marketable securities (< 1 year maturity)
+        - receivables: Amounts owed by customers
+        - inventories: Raw materials, WIP, and finished goods
+        - other_current_assets: Other assets (< 1 year)
+        - property_plant_equipment_net: Fixed assets net of depreciation
+        - goodwill: Excess of acquisition cost over fair value
+        - intangible_assets_net: Patents, trademarks, etc. net of amortization
+        - other_assets: Other long-term assets
+
+        Liabilities (what the company owes):
+        - total_liabilities: Sum of all liabilities
+        - total_current_liabilities: Obligations due within one year
+        - accounts_payable: Amounts owed to suppliers
+        - debt_current: Short-term borrowings and current portion of long-term debt
+        - deferred_revenue_current: Customer prepayments (< 1 year)
+        - accrued_and_other_current_liabilities: Other current obligations
+        - long_term_debt_and_capital_lease_obligations: Long-term borrowings
+        - other_noncurrent_liabilities: Other long-term obligations
+
+        Equity (shareholders' ownership):
+        - total_equity: Sum of all equity components
+        - total_equity_attributable_to_parent: Parent company equity
+        - common_stock: Par value of common shares
+        - preferred_stock: Par value of preferred shares
+        - additional_paid_in_capital: Capital received above par value
+        - retained_earnings_deficit: Cumulative earnings less dividends
+        - accumulated_other_comprehensive_income: Unrealized gains/losses
+        - treasury_stock: Repurchased shares held in treasury (negative value)
+        - noncontrolling_interest: Minority shareholders' ownership
+        - other_equity: Other equity components
+
+        Other:
+        - commitments_and_contingencies: Potential liabilities
+        - total_liabilities_and_equity: Total liabilities + equity (equals total_assets)
+
+    Understanding Balance Sheet Structure
+    -------------------------------------
+    The balance sheet follows the fundamental accounting equation:
+
+        **Assets = Liabilities + Shareholders' Equity**
+
+    1. **Assets** (what the company owns or controls):
+       - Current Assets: Convertible to cash within one year
+         * Cash and equivalents
+         * Short-term investments
+         * Accounts receivable
+         * Inventories
+       - Non-Current Assets: Long-term holdings
+         * Property, plant, and equipment (PP&E)
+         * Intangible assets and goodwill
+         * Long-term investments
+
+    2. **Liabilities** (what the company owes):
+       - Current Liabilities: Due within one year
+         * Accounts payable
+         * Short-term debt
+         * Deferred revenue
+       - Non-Current Liabilities: Long-term obligations
+         * Long-term debt
+         * Pension obligations
+         * Deferred tax liabilities
+
+    3. **Shareholders' Equity** (owners' residual interest):
+       - Contributed Capital: Common stock + additional paid-in capital
+       - Retained Earnings: Cumulative profits reinvested
+       - Accumulated Other Comprehensive Income: Unrealized gains/losses
+       - Treasury Stock: Repurchased shares (reduces equity)
+
+    Use Cases
+    ---------
+    1. **Financial Position Analysis**: Assess company's asset composition, debt levels,
+       and equity structure to evaluate financial health and stability.
+
+    2. **Liquidity Assessment**: Calculate current ratio (current assets / current liabilities)
+       and quick ratio to measure ability to meet short-term obligations.
+
+    3. **Leverage Analysis**: Evaluate debt-to-equity ratio and debt-to-assets ratio to
+       assess financial leverage and solvency risk.
+
+    4. **Trend Analysis**: Compare balance sheets across multiple periods to identify
+       changes in asset allocation, debt levels, and equity growth patterns.
+
+    Examples
+    --------
+    Example 1: Get most recent balance sheet for Apple
+        list_financials_balance_sheets(
+            tickers="AAPL",
+            limit=1,
+            sort="period_end.desc"
+        )
+
+        Returns Apple's latest balance sheet showing current financial position.
+
+    Example 2: Get annual balance sheets for Microsoft from 2020-2024
+        list_financials_balance_sheets(
+            tickers="MSFT",
+            timeframe="annual",
+            fiscal_year_gte=2020,
+            fiscal_year_lte=2024,
+            sort="fiscal_year.asc"
+        )
+
+        Returns five years of annual balance sheets for trend analysis.
+
+    Example 3: Get Q3 balance sheets across multiple years for Tesla
+        list_financials_balance_sheets(
+            tickers="TSLA",
+            fiscal_quarter=3,
+            timeframe="quarterly",
+            limit=5,
+            sort="fiscal_year.desc"
+        )
+
+        Returns last 5 years of Q3 balance sheets for seasonal comparison.
+
+    Example 4: Get balance sheets filed in 2025 for Amazon
+        list_financials_balance_sheets(
+            tickers="AMZN",
+            filing_date_gte="2025-01-01",
+            filing_date_lt="2026-01-01",
+            sort="filing_date.desc"
+        )
+
+        Returns all balance sheets filed with SEC during 2025.
+
+    Example 5: Compare balance sheets for multiple tech companies
+        list_financials_balance_sheets(
+            tickers_any_of="AAPL,MSFT,GOOGL,META",
+            timeframe="annual",
+            fiscal_year=2024,
+            limit=50
+        )
+
+        Returns 2024 annual balance sheets for comparative analysis across tech giants.
+
+    Notes
+    -----
+    - **Point-in-Time Snapshots**: Balance sheets represent the financial position at a specific
+      date (period_end), unlike income statements and cash flow statements which show activity
+      over a period of time.
+
+    - **Fundamental Equation**: total_assets always equals total_liabilities_and_equity. This
+      is the double-entry accounting principle that ensures balance sheet integrity.
+
+    - **Filing Lag**: filing_date is typically several weeks after period_end. Use period_end
+      for analyzing financial position at a specific time, and filing_date for tracking when
+      information became publicly available.
+
+    - **Fiscal vs Calendar Periods**: Companies may use fiscal years different from calendar
+      years. Apple's fiscal year ends in September, so fiscal Q4 2025 ends in September 2025,
+      not December 2025.
+
+    - **Quarterly vs Annual Data**: Quarterly balance sheets (timeframe="quarterly") show
+      positions at quarter ends (10-Q filings). Annual balance sheets (timeframe="annual")
+      show year-end positions (10-K filings) and typically include more detailed disclosures.
+
+    - **Key Financial Ratios**: Use balance sheet data to calculate:
+      * Current Ratio = total_current_assets / total_current_liabilities (liquidity)
+      * Quick Ratio = (cash + receivables) / total_current_liabilities (immediate liquidity)
+      * Debt-to-Equity = total_liabilities / total_equity (leverage)
+      * Debt-to-Assets = total_liabilities / total_assets (leverage)
+      * Asset Turnover = revenue / total_assets (efficiency, requires income statement)
+      * Return on Assets (ROA) = net_income / total_assets (profitability)
+      * Return on Equity (ROE) = net_income / total_equity (shareholder returns)
+
+    - **Working Capital**: Calculate net working capital = total_current_assets -
+      total_current_liabilities to measure short-term financial health and operational efficiency.
+
+    - **Treasury Stock**: Appears as negative value reducing total equity. Represents shares
+      the company repurchased but did not retire, held for potential future reissuance.
+
+    - **Goodwill and Intangibles**: Goodwill arises from acquisitions and represents the premium
+      paid over fair value. Intangible assets include patents, trademarks, customer relationships.
+      Both may be subject to impairment charges.
+
+    - **Data Completeness**: Not all fields are present for all companies. Field availability
+      depends on company structure and reporting practices. Use None/null checks when analyzing.
+
+    - **Multiple Ticker Symbols**: Some companies trade under multiple symbols (different share
+      classes). The tickers array may contain multiple values like ["GOOGL", "GOOG"] for Alphabet.
+
+    - **Range Filtering**: Use range parameters for flexible queries:
+      * Date ranges: period_end_gte + period_end_lte for specific time windows
+      * Year ranges: fiscal_year_gte + fiscal_year_lte for multi-year analysis
+      * Multiple companies: cik_any_of or tickers_any_of for batch queries
+
+    - **Pagination**: For large result sets, use limit parameter and next_url from response
+      metadata to retrieve subsequent pages. Default limit is 100, maximum is 50000.
+
+    - **Comparative Analysis**: Combine balance sheet data with income statements and cash flow
+      statements for comprehensive financial analysis. Cross-reference period_end, fiscal_year,
+      and fiscal_quarter to align data across statement types.
+    """
+    try:
+        # Build the params dictionary with range parameters
+        results = polygon_client._get(
+            "/stocks/financials/v1/balance-sheets",
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "cik": cik,
+                        "tickers": tickers,
+                        "period_end": period_end,
+                        "filing_date": filing_date,
+                        "fiscal_year": fiscal_year,
+                        "fiscal_quarter": fiscal_quarter,
+                        "timeframe": timeframe,
+                        "cik.any_of": cik_any_of,
+                        "cik.gt": cik_gt,
+                        "cik.gte": cik_gte,
+                        "cik.lt": cik_lt,
+                        "cik.lte": cik_lte,
+                        "tickers.all_of": tickers_all_of,
+                        "tickers.any_of": tickers_any_of,
+                        "period_end.gt": period_end_gt,
+                        "period_end.gte": period_end_gte,
+                        "period_end.lt": period_end_lt,
+                        "period_end.lte": period_end_lte,
+                        "filing_date.gt": filing_date_gt,
+                        "filing_date.gte": filing_date_gte,
+                        "filing_date.lt": filing_date_lt,
+                        "filing_date.lte": filing_date_lte,
+                        "fiscal_year.gt": fiscal_year_gt,
+                        "fiscal_year.gte": fiscal_year_gte,
+                        "fiscal_year.lt": fiscal_year_lt,
+                        "fiscal_year.lte": fiscal_year_lte,
+                        "fiscal_quarter.gt": fiscal_quarter_gt,
+                        "fiscal_quarter.gte": fiscal_quarter_gte,
+                        "fiscal_quarter.lt": fiscal_quarter_lt,
+                        "fiscal_quarter.lte": fiscal_quarter_lte,
+                        "timeframe.any_of": timeframe_any_of,
+                        "timeframe.gt": timeframe_gt,
+                        "timeframe.gte": timeframe_gte,
+                        "timeframe.lt": timeframe_lt,
+                        "timeframe.lte": timeframe_lte,
+                        "limit": limit,
+                        "sort": sort,
+                    }.items()
+                    if v is not None
+                },
+            },
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_financials_cash_flow_statements(
+    cik: Optional[str] = None,
+    tickers: Optional[str] = None,
+    period_end: Optional[Union[str, datetime, date]] = None,
+    filing_date: Optional[Union[str, datetime, date]] = None,
+    fiscal_year: Optional[int] = None,
+    fiscal_quarter: Optional[int] = None,
+    timeframe: Optional[str] = None,
+    cik_any_of: Optional[str] = None,
+    cik_gt: Optional[str] = None,
+    cik_gte: Optional[str] = None,
+    cik_lt: Optional[str] = None,
+    cik_lte: Optional[str] = None,
+    period_end_gt: Optional[Union[str, datetime, date]] = None,
+    period_end_gte: Optional[Union[str, datetime, date]] = None,
+    period_end_lt: Optional[Union[str, datetime, date]] = None,
+    period_end_lte: Optional[Union[str, datetime, date]] = None,
+    filing_date_gt: Optional[Union[str, datetime, date]] = None,
+    filing_date_gte: Optional[Union[str, datetime, date]] = None,
+    filing_date_lt: Optional[Union[str, datetime, date]] = None,
+    filing_date_lte: Optional[Union[str, datetime, date]] = None,
+    tickers_all_of: Optional[str] = None,
+    tickers_any_of: Optional[str] = None,
+    fiscal_year_gt: Optional[int] = None,
+    fiscal_year_gte: Optional[int] = None,
+    fiscal_year_lt: Optional[int] = None,
+    fiscal_year_lte: Optional[int] = None,
+    fiscal_quarter_gt: Optional[int] = None,
+    fiscal_quarter_gte: Optional[int] = None,
+    fiscal_quarter_lt: Optional[int] = None,
+    fiscal_quarter_lte: Optional[int] = None,
+    timeframe_any_of: Optional[str] = None,
+    timeframe_gt: Optional[str] = None,
+    timeframe_gte: Optional[str] = None,
+    timeframe_lt: Optional[str] = None,
+    timeframe_lte: Optional[str] = None,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve comprehensive cash flow statement data for public companies, including quarterly, annual,
+    and trailing twelve-month cash flows with detailed operating, investing, and financing activities.
+
+    Cash flow statements show how cash moves through a business over a period of time, tracking the
+    inflows and outflows across three core activities. This data is sourced from official SEC filings
+    (10-K for annual, 10-Q for quarterly) and includes TTM calculations that sum components over
+    four quarters.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/cash-flow-statements
+
+    Parameters
+    ----------
+    cik : str, optional
+        The company's Central Index Key (CIK), a unique identifier assigned by the SEC.
+        Example: "0000320193" for Apple Inc.
+        Look up CIKs at: https://www.sec.gov/search-filings/cik-lookup
+
+    tickers : str, optional
+        Filter for arrays that contain the ticker value.
+        Example: "AAPL"
+
+    period_end : str or date, optional
+        The last date of the reporting period.
+        Format: "YYYY-MM-DD"
+        Example: "2025-06-28" for Apple's Q3 2025
+
+    filing_date : str or date, optional
+        The date when the financial statement was filed with the SEC.
+        Format: "YYYY-MM-DD"
+        Example: "2025-08-01"
+
+    fiscal_year : int, optional
+        The fiscal year for the reporting period.
+        Example: 2025
+
+    fiscal_quarter : int, optional
+        The fiscal quarter number (1, 2, 3, or 4).
+        Example: 3 for Q3
+
+    timeframe : str, optional
+        The reporting period type.
+        Options: "quarterly", "annual", "trailing_twelve_months"
+
+    cik_any_of : str, optional
+        Filter equal to any of the CIK values (comma-separated).
+        Example: "0000320193,0000789019" for Apple and Microsoft
+
+    cik_gt : str, optional
+        Filter CIK greater than the value (lexicographic comparison).
+
+    cik_gte : str, optional
+        Filter CIK greater than or equal to the value.
+
+    cik_lt : str, optional
+        Filter CIK less than the value.
+
+    cik_lte : str, optional
+        Filter CIK less than or equal to the value.
+
+    period_end_gt : str or date, optional
+        Filter period end date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_gte : str or date, optional
+        Filter period end date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lt : str or date, optional
+        Filter period end date less than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lte : str or date, optional
+        Filter period end date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gt : str or date, optional
+        Filter filing date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gte : str or date, optional
+        Filter filing date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lt : str or date, optional
+        Filter filing date less than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lte : str or date, optional
+        Filter filing date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    tickers_all_of : str, optional
+        Filter for arrays that contain all of the ticker values (comma-separated).
+        Example: "AAPL,AAPL.O" requires both tickers present
+
+    tickers_any_of : str, optional
+        Filter for arrays that contain any of the ticker values (comma-separated).
+        Example: "AAPL,MSFT" matches either ticker
+
+    fiscal_year_gt : int, optional
+        Filter fiscal year greater than the value.
+
+    fiscal_year_gte : int, optional
+        Filter fiscal year greater than or equal to the value.
+
+    fiscal_year_lt : int, optional
+        Filter fiscal year less than the value.
+
+    fiscal_year_lte : int, optional
+        Filter fiscal year less than or equal to the value.
+
+    fiscal_quarter_gt : int, optional
+        Filter fiscal quarter greater than the value.
+
+    fiscal_quarter_gte : int, optional
+        Filter fiscal quarter greater than or equal to the value.
+
+    fiscal_quarter_lt : int, optional
+        Filter fiscal quarter less than the value.
+
+    fiscal_quarter_lte : int, optional
+        Filter fiscal quarter less than or equal to the value.
+
+    timeframe_any_of : str, optional
+        Filter equal to any of the timeframe values (comma-separated).
+        Example: "quarterly,annual,trailing_twelve_months"
+
+    timeframe_gt : str, optional
+        Filter timeframe greater than the value (lexicographic).
+
+    timeframe_gte : str, optional
+        Filter timeframe greater than or equal to the value.
+
+    timeframe_lt : str, optional
+        Filter timeframe less than the value.
+
+    timeframe_lte : str, optional
+        Filter timeframe less than or equal to the value.
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 100, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "period_end.desc"
+        Example: "period_end.asc,fiscal_year.desc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing cash flow statement data with the following key fields:
+
+        Identification:
+        - cik: SEC Central Index Key
+        - tickers: Array of ticker symbols
+        - period_end: Reporting period end date
+        - filing_date: SEC filing date
+        - fiscal_year: Fiscal year
+        - fiscal_quarter: Fiscal quarter (1-4)
+        - timeframe: "quarterly", "annual", or "trailing_twelve_months"
+
+        Operating Activities (cash from core business):
+        - net_cash_from_operating_activities: Total operating cash flow
+        - cash_from_operating_activities_continuing_operations: Operating cash from continuing ops
+        - net_cash_from_operating_activities_discontinued_operations: Operating cash from discontinued ops
+        - net_income: Net income (starting point for indirect method)
+        - depreciation_depletion_and_amortization: Non-cash D&A add-back
+        - change_in_other_operating_assets_and_liabilities_net: Working capital changes
+        - other_operating_activities: Other operating adjustments
+        - income_loss_from_discontinued_operations: Discontinued operations income/loss
+
+        Investing Activities (cash from asset transactions):
+        - net_cash_from_investing_activities: Total investing cash flow
+        - net_cash_from_investing_activities_continuing_operations: Investing cash from continuing ops
+        - net_cash_from_investing_activities_discontinued_operations: Investing cash from discontinued ops
+        - purchase_of_property_plant_and_equipment: Capital expenditures (CapEx, negative)
+        - sale_of_property_plant_and_equipment: Asset sales proceeds (positive)
+        - other_investing_activities: Other investing transactions
+
+        Financing Activities (cash from capital transactions):
+        - net_cash_from_financing_activities: Total financing cash flow
+        - net_cash_from_financing_activities_continuing_operations: Financing cash from continuing ops
+        - net_cash_from_financing_activities_discontinued_operations: Financing cash from discontinued ops
+        - dividends: Dividend payments (negative)
+        - long_term_debt_issuances_repayments: Net long-term debt transactions
+        - short_term_debt_issuances_repayments: Net short-term debt transactions
+        - other_financing_activities: Other financing transactions (often includes share repurchases)
+        - noncontrolling_interests: Cash flows related to minority shareholders
+
+        Summary:
+        - change_in_cash_and_equivalents: Net change in cash (sum of operating + investing + financing + FX effects)
+        - effect_of_currency_exchange_rate: Impact of foreign exchange rate changes
+        - other_cash_adjustments: Other miscellaneous adjustments
+
+    Understanding Cash Flow Statement Structure
+    -------------------------------------------
+    The cash flow statement tracks cash movements across three core activities:
+
+    1. **Operating Activities** (cash from core business):
+       - Starts with net income (from income statement)
+       - Adds back non-cash expenses (depreciation, amortization)
+       - Adjusts for working capital changes:
+         * Increase in receivables → cash outflow (customers owe more)
+         * Increase in inventory → cash outflow (more inventory purchased)
+         * Increase in payables → cash inflow (more owed to suppliers)
+       - Result: Cash generated by day-to-day operations
+
+    2. **Investing Activities** (cash from asset transactions):
+       - Capital expenditures (CapEx): Purchases of PP&E (negative)
+       - Asset sales: Proceeds from disposals (positive)
+       - Acquisitions: Purchases of businesses (negative)
+       - Investments: Purchases/sales of securities
+       - Result: Cash used for growth and long-term investments
+
+    3. **Financing Activities** (cash from capital transactions):
+       - Debt issuance: Borrowing cash (positive)
+       - Debt repayment: Paying down debt (negative)
+       - Dividends: Payments to shareholders (negative)
+       - Share repurchases: Buying back stock (negative, in other_financing_activities)
+       - Share issuance: Selling new shares (positive)
+       - Result: Cash flows between company and capital providers
+
+    **Cash Flow Equation**:
+        Change in Cash = Operating CF + Investing CF + Financing CF + FX Effects
+
+    Use Cases
+    ---------
+    1. **Liquidity Assessment**: Evaluate company's ability to generate cash from operations
+       and meet short-term obligations without external financing.
+
+    2. **Operational Efficiency**: Analyze operating cash flow trends and working capital
+       management to assess business quality and cash conversion efficiency.
+
+    3. **Investment Analysis**: Track capital expenditures (CapEx), acquisitions, and free
+       cash flow (operating cash - CapEx) to evaluate growth investments and shareholder returns.
+
+    4. **Financial Health Monitoring**: Compare cash flows across activities to identify
+       whether growth is funded by operations, debt, or equity, and assess dividend sustainability.
+
+    Examples
+    --------
+    Example 1: Get most recent cash flow statement for Apple
+        list_financials_cash_flow_statements(
+            tickers="AAPL",
+            limit=1,
+            sort="period_end.desc"
+        )
+
+        Returns Apple's latest cash flow statement showing recent cash generation and usage.
+
+    Example 2: Get annual cash flow statements for Microsoft from 2020-2024
+        list_financials_cash_flow_statements(
+            tickers="MSFT",
+            timeframe="annual",
+            fiscal_year_gte=2020,
+            fiscal_year_lte=2024,
+            sort="fiscal_year.asc"
+        )
+
+        Returns five years of annual cash flows for trend analysis and free cash flow calculation.
+
+    Example 3: Get trailing twelve-month (TTM) cash flows for Tesla
+        list_financials_cash_flow_statements(
+            tickers="TSLA",
+            timeframe="trailing_twelve_months",
+            limit=4,
+            sort="period_end.desc"
+        )
+
+        Returns most recent TTM cash flows, useful for current run-rate analysis.
+
+    Example 4: Get Q4 cash flows across multiple years for Amazon
+        list_financials_cash_flow_statements(
+            tickers="AMZN",
+            fiscal_quarter=4,
+            timeframe="quarterly",
+            limit=5,
+            sort="fiscal_year.desc"
+        )
+
+        Returns last 5 years of Q4 cash flows for seasonal comparison and holiday period analysis.
+
+    Example 5: Compare cash flows for multiple tech companies
+        list_financials_cash_flow_statements(
+            tickers_any_of="AAPL,MSFT,GOOGL,META",
+            timeframe="annual",
+            fiscal_year=2024,
+            limit=50
+        )
+
+        Returns 2024 annual cash flows for comparative analysis of cash generation efficiency.
+
+    Notes
+    -----
+    - **Period vs Point-in-Time**: Cash flow statements represent activity over a period (from
+      start to end of quarter/year), unlike balance sheets which are point-in-time snapshots.
+
+    - **Indirect vs Direct Method**: Most companies use the indirect method, starting with net
+      income and adjusting for non-cash items and working capital changes. The direct method
+      (rarely used) shows actual cash receipts and payments.
+
+    - **Free Cash Flow (FCF)**: Calculate as operating cash flow minus capital expenditures:
+      * FCF = net_cash_from_operating_activities - purchase_of_property_plant_and_equipment
+      * Represents cash available for distribution to shareholders or debt reduction
+      * Key metric for valuation and dividend sustainability analysis
+
+    - **Cash vs Earnings Quality**: Compare net income to operating cash flow:
+      * Operating CF > Net Income → High quality earnings (cash-backed)
+      * Operating CF < Net Income → Potential earnings quality issues (accrual-heavy)
+      * Persistent divergence may indicate aggressive accounting or business issues
+
+    - **Working Capital Impact**: change_in_other_operating_assets_and_liabilities_net shows
+      working capital changes. Negative values can indicate:
+      * Growing receivables (customers paying slower)
+      * Inventory buildup (potential demand issues or poor inventory management)
+      * Positive values may indicate improving collections or inventory efficiency
+
+    - **Trailing Twelve Months (TTM)**: timeframe="trailing_twelve_months" provides rolling
+      12-month cash flows, useful for:
+      * Smoothing seasonal variations
+      * Getting current run-rate without waiting for annual reports
+      * Valuation using most recent full-year data
+
+    - **Share Repurchases**: Often reported in other_financing_activities rather than a separate
+      field. These are negative cash flows representing shareholder returns alongside dividends.
+
+    - **CapEx Trends**: Track purchase_of_property_plant_and_equipment over time:
+      * Increasing CapEx → Growth investments, expansion
+      * Decreasing CapEx → Mature business, slower growth, or cost cutting
+      * Compare CapEx to depreciation to assess asset base maintenance
+
+    - **Dividend Coverage**: Calculate dividend coverage ratio:
+      * Coverage = net_cash_from_operating_activities / abs(dividends)
+      * Ratio > 1.0 → Dividends covered by operating cash (sustainable)
+      * Ratio < 1.0 → Dividends funded by debt/equity (potential risk)
+
+    - **Debt Service**: Monitor debt issuance and repayment patterns:
+      * Positive net debt → Increasing leverage, potential liquidity needs
+      * Negative net debt → Deleveraging, improving financial position
+      * Compare to operating cash flow for debt serviceability assessment
+
+    - **Discontinued Operations**: Fields with "discontinued_operations" suffix show cash flows
+      from business segments being wound down. These are non-recurring and should be excluded
+      from ongoing analysis.
+
+    - **Currency Effects**: effect_of_currency_exchange_rate shows impact of FX rate changes on
+      cash held in foreign currencies. Material for multinational companies with significant
+      international operations.
+
+    - **Data Completeness**: Not all fields are present for all companies. Field availability
+      depends on company structure and reporting practices. Use None/null checks when analyzing.
+
+    - **Quarterly vs Annual**: Quarterly cash flows can be volatile due to working capital
+      timing. Annual or TTM data provides smoother trends for analysis.
+
+    - **Cross-Statement Analysis**: Combine with balance sheets and income statements:
+      * Net income (income statement) → Starting point for operating cash flow
+      * Change in cash (balance sheet) → Should equal change_in_cash_and_equivalents
+      * Working capital changes → Link to balance sheet current asset/liability changes
+
+    - **Pagination**: For large result sets, use limit parameter and next_url from response
+      metadata to retrieve subsequent pages. Default limit is 100, maximum is 50000.
+    """
+    try:
+        # Build the params dictionary with range parameters
+        results = polygon_client._get(
+            "/stocks/financials/v1/cash-flow-statements",
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "cik": cik,
+                        "tickers": tickers,
+                        "period_end": period_end,
+                        "filing_date": filing_date,
+                        "fiscal_year": fiscal_year,
+                        "fiscal_quarter": fiscal_quarter,
+                        "timeframe": timeframe,
+                        "cik.any_of": cik_any_of,
+                        "cik.gt": cik_gt,
+                        "cik.gte": cik_gte,
+                        "cik.lt": cik_lt,
+                        "cik.lte": cik_lte,
+                        "period_end.gt": period_end_gt,
+                        "period_end.gte": period_end_gte,
+                        "period_end.lt": period_end_lt,
+                        "period_end.lte": period_end_lte,
+                        "filing_date.gt": filing_date_gt,
+                        "filing_date.gte": filing_date_gte,
+                        "filing_date.lt": filing_date_lt,
+                        "filing_date.lte": filing_date_lte,
+                        "tickers.all_of": tickers_all_of,
+                        "tickers.any_of": tickers_any_of,
+                        "fiscal_year.gt": fiscal_year_gt,
+                        "fiscal_year.gte": fiscal_year_gte,
+                        "fiscal_year.lt": fiscal_year_lt,
+                        "fiscal_year.lte": fiscal_year_lte,
+                        "fiscal_quarter.gt": fiscal_quarter_gt,
+                        "fiscal_quarter.gte": fiscal_quarter_gte,
+                        "fiscal_quarter.lt": fiscal_quarter_lt,
+                        "fiscal_quarter.lte": fiscal_quarter_lte,
+                        "timeframe.any_of": timeframe_any_of,
+                        "timeframe.gt": timeframe_gt,
+                        "timeframe.gte": timeframe_gte,
+                        "timeframe.lt": timeframe_lt,
+                        "timeframe.lte": timeframe_lte,
+                        "limit": limit,
+                        "sort": sort,
+                    }.items()
+                    if v is not None
+                },
+            },
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_financials_income_statements(
+    cik: Optional[str] = None,
+    tickers: Optional[str] = None,
+    period_end: Optional[Union[str, datetime, date]] = None,
+    filing_date: Optional[Union[str, datetime, date]] = None,
+    fiscal_year: Optional[int] = None,
+    fiscal_quarter: Optional[int] = None,
+    timeframe: Optional[str] = None,
+    cik_any_of: Optional[str] = None,
+    cik_gt: Optional[str] = None,
+    cik_gte: Optional[str] = None,
+    cik_lt: Optional[str] = None,
+    cik_lte: Optional[str] = None,
+    tickers_all_of: Optional[str] = None,
+    tickers_any_of: Optional[str] = None,
+    period_end_gt: Optional[Union[str, datetime, date]] = None,
+    period_end_gte: Optional[Union[str, datetime, date]] = None,
+    period_end_lt: Optional[Union[str, datetime, date]] = None,
+    period_end_lte: Optional[Union[str, datetime, date]] = None,
+    filing_date_gt: Optional[Union[str, datetime, date]] = None,
+    filing_date_gte: Optional[Union[str, datetime, date]] = None,
+    filing_date_lt: Optional[Union[str, datetime, date]] = None,
+    filing_date_lte: Optional[Union[str, datetime, date]] = None,
+    fiscal_year_gt: Optional[int] = None,
+    fiscal_year_gte: Optional[int] = None,
+    fiscal_year_lt: Optional[int] = None,
+    fiscal_year_lte: Optional[int] = None,
+    fiscal_quarter_gt: Optional[int] = None,
+    fiscal_quarter_gte: Optional[int] = None,
+    fiscal_quarter_lt: Optional[int] = None,
+    fiscal_quarter_lte: Optional[int] = None,
+    timeframe_any_of: Optional[str] = None,
+    timeframe_gt: Optional[str] = None,
+    timeframe_gte: Optional[str] = None,
+    timeframe_lt: Optional[str] = None,
+    timeframe_lte: Optional[str] = None,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve comprehensive income statement data for public companies, including revenue, expenses,
+    and net income across quarterly, annual, and trailing twelve-month periods.
+
+    Income statements (also called profit and loss or P&L statements) show a company's financial
+    performance over a period of time, detailing revenues, expenses, and profitability. This data
+    is sourced from official SEC filings (10-K for annual, 10-Q for quarterly) and includes TTM
+    calculations that sum components over four quarters.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/income-statements
+
+    Parameters
+    ----------
+    cik : str, optional
+        The company's Central Index Key (CIK), a unique identifier assigned by the SEC.
+        Example: "0000320193" for Apple Inc.
+        Look up CIKs at: https://www.sec.gov/search-filings/cik-lookup
+
+    tickers : str, optional
+        Filter for arrays that contain the ticker value.
+        Example: "AAPL"
+
+    period_end : str or date, optional
+        The last date of the reporting period.
+        Format: "YYYY-MM-DD"
+        Example: "2025-06-28" for Apple's Q3 2025
+
+    filing_date : str or date, optional
+        The date when the financial statement was filed with the SEC.
+        Format: "YYYY-MM-DD"
+        Example: "2025-08-01"
+
+    fiscal_year : int, optional
+        The fiscal year for the reporting period.
+        Example: 2025
+
+    fiscal_quarter : int, optional
+        The fiscal quarter number (1, 2, 3, or 4).
+        Example: 3 for Q3
+
+    timeframe : str, optional
+        The reporting period type.
+        Options: "quarterly", "annual", "trailing_twelve_months"
+
+    cik_any_of : str, optional
+        Filter equal to any of the CIK values (comma-separated).
+        Example: "0000320193,0000789019" for Apple and Microsoft
+
+    cik_gt : str, optional
+        Filter CIK greater than the value (lexicographic comparison).
+
+    cik_gte : str, optional
+        Filter CIK greater than or equal to the value.
+
+    cik_lt : str, optional
+        Filter CIK less than the value.
+
+    cik_lte : str, optional
+        Filter CIK less than or equal to the value.
+
+    tickers_all_of : str, optional
+        Filter for arrays that contain all of the ticker values (comma-separated).
+        Example: "AAPL,AAPL.O" requires both tickers present
+
+    tickers_any_of : str, optional
+        Filter for arrays that contain any of the ticker values (comma-separated).
+        Example: "AAPL,MSFT" matches either ticker
+
+    period_end_gt : str or date, optional
+        Filter period end date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_gte : str or date, optional
+        Filter period end date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lt : str or date, optional
+        Filter period end date less than the value.
+        Format: "YYYY-MM-DD"
+
+    period_end_lte : str or date, optional
+        Filter period end date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gt : str or date, optional
+        Filter filing date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_gte : str or date, optional
+        Filter filing date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lt : str or date, optional
+        Filter filing date less than the value.
+        Format: "YYYY-MM-DD"
+
+    filing_date_lte : str or date, optional
+        Filter filing date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    fiscal_year_gt : int, optional
+        Filter fiscal year greater than the value.
+
+    fiscal_year_gte : int, optional
+        Filter fiscal year greater than or equal to the value.
+
+    fiscal_year_lt : int, optional
+        Filter fiscal year less than the value.
+
+    fiscal_year_lte : int, optional
+        Filter fiscal year less than or equal to the value.
+
+    fiscal_quarter_gt : int, optional
+        Filter fiscal quarter greater than the value.
+
+    fiscal_quarter_gte : int, optional
+        Filter fiscal quarter greater than or equal to the value.
+
+    fiscal_quarter_lt : int, optional
+        Filter fiscal quarter less than the value.
+
+    fiscal_quarter_lte : int, optional
+        Filter fiscal quarter less than or equal to the value.
+
+    timeframe_any_of : str, optional
+        Filter equal to any of the timeframe values (comma-separated).
+        Example: "quarterly,annual,trailing_twelve_months"
+
+    timeframe_gt : str, optional
+        Filter timeframe greater than the value (lexicographic).
+
+    timeframe_gte : str, optional
+        Filter timeframe greater than or equal to the value.
+
+    timeframe_lt : str, optional
+        Filter timeframe less than the value.
+
+    timeframe_lte : str, optional
+        Filter timeframe less than or equal to the value.
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 100, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "period_end.desc"
+        Example: "period_end.asc,fiscal_year.desc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing income statement data with the following key fields:
+
+        Identification:
+        - cik: SEC Central Index Key
+        - tickers: Array of ticker symbols
+        - period_end: Reporting period end date
+        - filing_date: SEC filing date
+        - fiscal_year: Fiscal year
+        - fiscal_quarter: Fiscal quarter (1-4)
+        - timeframe: "quarterly", "annual", or "trailing_twelve_months"
+
+        Revenue and Gross Profit:
+        - revenue: Total revenue/net sales
+        - cost_of_revenue: Direct costs of goods/services sold (COGS)
+        - gross_profit: Revenue minus cost of revenue
+
+        Operating Expenses:
+        - selling_general_administrative: SG&A expenses
+        - research_development: R&D expenses
+        - depreciation_depletion_amortization: Non-cash D&A expense
+        - other_operating_expenses: Other operating costs
+        - total_operating_expenses: Sum of all operating expenses
+
+        Operating Performance:
+        - operating_income: Profit from operations (gross profit - operating expenses)
+        - ebitda: Earnings before interest, taxes, depreciation, and amortization
+
+        Non-Operating Items:
+        - interest_income: Income from interest-bearing investments
+        - interest_expense: Cost of borrowed funds
+        - other_income_expense: Other non-operating income/expenses
+        - total_other_income_expense: Net total of non-operating items
+
+        Pre-Tax and Net Income:
+        - income_before_income_taxes: Pre-tax income
+        - income_taxes: Income tax expense
+        - consolidated_net_income_loss: Total net income including all subsidiaries
+        - discontinued_operations: After-tax results from discontinued segments
+        - extraordinary_items: Unusual and infrequent items
+        - equity_in_affiliates: Share of income from equity method investments
+
+        Net Income Attribution:
+        - noncontrolling_interest: Net income attributable to minority shareholders
+        - preferred_stock_dividends_declared: Preferred stock dividends
+        - net_income_loss_attributable_common_shareholders: Net income available to common shareholders
+
+        Per-Share Metrics:
+        - basic_shares_outstanding: Weighted average basic shares
+        - basic_earnings_per_share: Basic EPS
+        - diluted_shares_outstanding: Weighted average diluted shares (including options/warrants)
+        - diluted_earnings_per_share: Diluted EPS
+
+    Understanding Income Statement Structure
+    -----------------------------------------
+    The income statement follows a multi-step format showing profitability at different levels:
+
+    1. **Revenue and Gross Profit**:
+       - Revenue: Total sales and operating income
+       - Cost of Revenue (COGS): Direct production costs
+       - **Gross Profit = Revenue - Cost of Revenue**
+       - Gross Margin % = Gross Profit / Revenue
+
+    2. **Operating Income**:
+       - Operating Expenses:
+         * Selling, General & Administrative (SG&A)
+         * Research & Development (R&D)
+         * Depreciation & Amortization (D&A)
+       - **Operating Income = Gross Profit - Total Operating Expenses**
+       - Operating Margin % = Operating Income / Revenue
+
+    3. **Pre-Tax Income**:
+       - Non-Operating Items:
+         * Interest income (positive)
+         * Interest expense (negative)
+         * Other income/expense
+       - **Income Before Taxes = Operating Income + Total Other Income/Expense**
+
+    4. **Net Income**:
+       - Income tax expense
+       - **Net Income = Income Before Taxes - Income Taxes**
+       - Net Margin % = Net Income / Revenue
+
+    5. **Earnings Per Share (EPS)**:
+       - **Basic EPS = Net Income / Basic Shares Outstanding**
+       - **Diluted EPS = Net Income / Diluted Shares Outstanding**
+         (includes dilutive effect of options, warrants, convertibles)
+
+    Use Cases
+    ---------
+    1. **Profitability Analysis**: Evaluate revenue growth, margin trends, and bottom-line
+       profitability to assess financial performance and business model efficiency.
+
+    2. **Revenue Trend Analysis**: Track revenue growth rates across quarters and years
+       to identify business momentum, seasonality, and market share dynamics.
+
+    3. **Expense Management Evaluation**: Analyze operating expense ratios and cost structure
+       to assess operational efficiency and cost discipline.
+
+    4. **Earnings Assessment**: Calculate earnings quality metrics, compare earnings to
+       cash flow, and evaluate sustainability of profitability for valuation purposes.
+
+    Examples
+    --------
+    Example 1: Get most recent income statement for Apple
+        list_financials_income_statements(
+            tickers="AAPL",
+            limit=1,
+            sort="period_end.desc"
+        )
+
+        Returns Apple's latest income statement showing recent revenue and profitability.
+
+    Example 2: Get annual income statements for Microsoft from 2020-2024
+        list_financials_income_statements(
+            tickers="MSFT",
+            timeframe="annual",
+            fiscal_year_gte=2020,
+            fiscal_year_lte=2024,
+            sort="fiscal_year.asc"
+        )
+
+        Returns five years of annual income statements for revenue and earnings trend analysis.
+
+    Example 3: Get trailing twelve-month (TTM) income for Tesla
+        list_financials_income_statements(
+            tickers="TSLA",
+            timeframe="trailing_twelve_months",
+            limit=4,
+            sort="period_end.desc"
+        )
+
+        Returns most recent TTM income statements for current run-rate profitability analysis.
+
+    Example 4: Get Q4 income statements across multiple years for Amazon
+        list_financials_income_statements(
+            tickers="AMZN",
+            fiscal_quarter=4,
+            timeframe="quarterly",
+            limit=5,
+            sort="fiscal_year.desc"
+        )
+
+        Returns last 5 years of Q4 income statements for holiday season performance comparison.
+
+    Example 5: Compare profitability for multiple tech companies
+        list_financials_income_statements(
+            tickers_any_of="AAPL,MSFT,GOOGL,META",
+            timeframe="annual",
+            fiscal_year=2024,
+            limit=50
+        )
+
+        Returns 2024 annual income statements for comparative margin and profitability analysis.
+
+    Notes
+    -----
+    - **Period-Based Statement**: Income statements show activity over a period (quarter/year),
+      unlike balance sheets which are point-in-time snapshots. Revenue and expenses accrue
+      during the reporting period.
+
+    - **GAAP Revenue Recognition**: Revenue is recognized when earned, not necessarily when
+      cash is received. Compare to cash flow from operations to assess cash collection quality.
+
+    - **Key Profitability Margins**: Calculate and track these margin metrics:
+      * Gross Margin = gross_profit / revenue (pricing power and production efficiency)
+      * Operating Margin = operating_income / revenue (operational efficiency)
+      * EBITDA Margin = ebitda / revenue (cash generation potential)
+      * Net Margin = net_income / revenue (overall profitability)
+
+    - **Margin Trend Analysis**: Compare margins across periods:
+      * Expanding margins → Improving efficiency, pricing power, operating leverage
+      * Contracting margins → Competitive pressure, cost inflation, inefficiency
+      * Stable margins → Mature business, consistent operations
+
+    - **Basic vs Diluted EPS**: Diluted EPS accounts for potential dilution from stock options,
+      warrants, and convertible securities. For TTM records, EPS is recalculated using TTM net
+      income divided by average shares over four quarters.
+
+    - **Share Count Changes**: Track basic_shares_outstanding and diluted_shares_outstanding:
+      * Decreasing shares → Share buybacks (shareholder-friendly)
+      * Increasing shares → Share issuance or dilution from employee compensation
+      * Dilution gap (diluted - basic) → Potential dilution from stock options/warrants
+
+    - **EBITDA vs Operating Income**: EBITDA adds back depreciation and amortization to
+      operating income, providing a proxy for cash-based operating performance. Useful for
+      comparing companies with different capital structures and depreciation policies.
+
+    - **Revenue Quality**: Assess revenue sustainability by examining:
+      * Revenue growth consistency across periods
+      * Revenue concentration by customer/geography
+      * Deferred revenue trends (future revenue visibility)
+      * Revenue recognition policies (aggressive vs conservative)
+
+    - **Expense Analysis**: Break down expense structure:
+      * cost_of_revenue / revenue = Cost structure efficiency
+      * selling_general_administrative / revenue = Sales and admin efficiency
+      * research_development / revenue = Innovation investment level
+      * Compare expense ratios to industry peers for competitive positioning
+
+    - **Non-Operating Items**: Separate operating from non-operating performance:
+      * other_income_expense includes gains/losses on investments, asset sales
+      * discontinued_operations shows results from exited businesses (non-recurring)
+      * extraordinary_items are unusual and infrequent (rare under current GAAP)
+
+    - **Tax Rate Analysis**: Calculate effective tax rate:
+      * Effective Tax Rate = income_taxes / income_before_income_taxes
+      * Compare to statutory rates to identify tax benefits/liabilities
+      * Track tax rate trends for future tax expense forecasting
+
+    - **Trailing Twelve Months (TTM)**: timeframe="trailing_twelve_months" provides rolling
+      12-month results, useful for:
+      * Smoothing seasonal variations in quarterly results
+      * Getting current full-year run-rate for valuation (P/E ratio using TTM EPS)
+      * Avoiding distortions from one-time items in single quarters
+
+    - **Quarterly Seasonality**: Many businesses have seasonal patterns:
+      * Retail: Q4 holiday season typically strongest
+      * Tech: Enterprise spending often weighted to Q4
+      * Compare same quarters year-over-year for apples-to-apples comparison
+
+    - **Year-over-Year Growth**: Calculate growth rates:
+      * Revenue Growth % = (Current Period Revenue / Prior Period Revenue) - 1
+      * EPS Growth % = (Current Period EPS / Prior Period EPS) - 1
+      * Use same timeframe (Q3 2025 vs Q3 2024) for quarterly comparisons
+
+    - **Earnings Quality**: Assess earnings quality by comparing to cash flow:
+      * High quality: Net income ≈ Operating cash flow (from cash flow statement)
+      * Low quality: Net income >> Operating cash flow (aggressive accruals)
+      * Persistent divergence may indicate accounting issues or business deterioration
+
+    - **Data Completeness**: Not all fields are present for all companies. Field availability
+      depends on business model and reporting practices. Financial services companies have
+      different income statement structures than industrial companies.
+
+    - **Multiple Ticker Symbols**: Some companies trade under multiple symbols (different share
+      classes). The tickers array may contain multiple values like ["GOOGL", "GOOG"] for Alphabet.
+
+    - **Cross-Statement Analysis**: Combine with balance sheets and cash flow statements:
+      * Revenue (income statement) vs Receivables (balance sheet) → Collection efficiency
+      * Net income (income statement) vs Operating cash flow (cash flow) → Earnings quality
+      * Operating expenses (income statement) vs CapEx (cash flow) → Investment vs expense
+
+    - **Pagination**: For large result sets, use limit parameter and next_url from response
+      metadata to retrieve subsequent pages. Default limit is 100, maximum is 50000.
+
+    - **Valuation Metrics**: Use income statement data for valuation:
+      * P/E Ratio = Market Cap / Net Income (or Price per Share / EPS)
+      * P/S Ratio = Market Cap / Revenue
+      * EV/EBITDA = Enterprise Value / EBITDA
+      * PEG Ratio = P/E Ratio / EPS Growth Rate
+    """
+    try:
+        # Build the params dictionary with range parameters
+        results = polygon_client._get(
+            "/stocks/financials/v1/income-statements",
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "cik": cik,
+                        "tickers": tickers,
+                        "period_end": period_end,
+                        "filing_date": filing_date,
+                        "fiscal_year": fiscal_year,
+                        "fiscal_quarter": fiscal_quarter,
+                        "timeframe": timeframe,
+                        "cik.any_of": cik_any_of,
+                        "cik.gt": cik_gt,
+                        "cik.gte": cik_gte,
+                        "cik.lt": cik_lt,
+                        "cik.lte": cik_lte,
+                        "tickers.all_of": tickers_all_of,
+                        "tickers.any_of": tickers_any_of,
+                        "period_end.gt": period_end_gt,
+                        "period_end.gte": period_end_gte,
+                        "period_end.lt": period_end_lt,
+                        "period_end.lte": period_end_lte,
+                        "filing_date.gt": filing_date_gt,
+                        "filing_date.gte": filing_date_gte,
+                        "filing_date.lt": filing_date_lt,
+                        "filing_date.lte": filing_date_lte,
+                        "fiscal_year.gt": fiscal_year_gt,
+                        "fiscal_year.gte": fiscal_year_gte,
+                        "fiscal_year.lt": fiscal_year_lt,
+                        "fiscal_year.lte": fiscal_year_lte,
+                        "fiscal_quarter.gt": fiscal_quarter_gt,
+                        "fiscal_quarter.gte": fiscal_quarter_gte,
+                        "fiscal_quarter.lt": fiscal_quarter_lt,
+                        "fiscal_quarter.lte": fiscal_quarter_lte,
+                        "timeframe.any_of": timeframe_any_of,
+                        "timeframe.gt": timeframe_gt,
+                        "timeframe.gte": timeframe_gte,
+                        "timeframe.lt": timeframe_lt,
+                        "timeframe.lte": timeframe_lte,
+                        "limit": limit,
+                        "sort": sort,
+                    }.items()
+                    if v is not None
+                },
+            },
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_financials_ratios(
+    cik: Optional[str] = None,
+    ticker: Optional[str] = None,
+    period_end: Optional[Union[str, datetime, date]] = None,
+    filing_date: Optional[Union[str, datetime, date]] = None,
+    fiscal_year: Optional[int] = None,
+    fiscal_quarter: Optional[int] = None,
+    timeframe: Optional[str] = None,
+    limit: Optional[int] = 10,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get financial ratios for companies, providing key metrics for analyzing financial health and performance.
+    Returns calculated ratios from SEC filings including profitability, liquidity, leverage, and efficiency metrics.
+
+    Reference: https://polygon.io/docs/rest/stocks/fundamentals/financial-ratios
+
+    Parameters:
+    - cik: Filter by SEC Central Index Key (CIK)
+    - ticker: Filter by ticker symbol (e.g., "AAPL", "MSFT")
+    - period_end: Filter by period end date (YYYY-MM-DD)
+    - filing_date: Filter by SEC filing date (YYYY-MM-DD)
+    - fiscal_year: Filter by fiscal year
+    - fiscal_quarter: Filter by fiscal quarter (1-4)
+    - timeframe: Filter by reporting period (quarterly, annual)
+    - limit: Number of results to return (default: 10, max: 50000)
+    - sort: Sort by fields with .asc or .desc suffix
+
+    Example: list_financials_ratios(ticker="AAPL") returns Apple's financial ratios
+    Example: list_financials_ratios(ticker="MSFT", timeframe="annual") returns annual financial ratios
+    Example: list_financials_ratios(ticker="GOOGL", fiscal_year=2023) returns 2023 financial ratios
+
+    Note: Financial ratios provide insights into company performance:
+    - Profitability: ROE (Return on Equity), ROA (Return on Assets), Net Profit Margin
+    - Liquidity: Current Ratio, Quick Ratio - ability to meet short-term obligations
+    - Leverage: Debt-to-Equity, Debt Ratio - how much debt finances the company
+    - Efficiency: Asset Turnover, Inventory Turnover - how effectively assets generate revenue
+    These ratios are calculated from balance sheet, income statement, and cash flow data.
+    """
+    try:
+        # Build the params dictionary
+        request_params = params or {}
+        if cik:
+            request_params["cik"] = cik
+        if ticker:
+            request_params["ticker"] = ticker
+        if period_end:
+            request_params["period_end"] = period_end
+        if filing_date:
+            request_params["filing_date"] = filing_date
+        if fiscal_year:
+            request_params["fiscal_year"] = fiscal_year
+        if fiscal_quarter:
+            request_params["fiscal_quarter"] = fiscal_quarter
+        if timeframe:
+            request_params["timeframe"] = timeframe
+        if limit:
+            request_params["limit"] = limit
+        if sort:
+            request_params["sort"] = sort
+
+        # Make the request to the financial ratios endpoint
+        results = polygon_client._get(
+            "/vX/reference/financials/ratios", params=request_params
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_stock_ratios(
+    ticker: Optional[str] = None,
+    cik: Optional[str] = None,
+    price: Optional[float] = None,
+    average_volume: Optional[float] = None,
+    market_cap: Optional[float] = None,
+    earnings_per_share: Optional[float] = None,
+    price_to_earnings: Optional[float] = None,
+    price_to_book: Optional[float] = None,
+    price_to_sales: Optional[float] = None,
+    price_to_cash_flow: Optional[float] = None,
+    price_to_free_cash_flow: Optional[float] = None,
+    dividend_yield: Optional[float] = None,
+    return_on_assets: Optional[float] = None,
+    return_on_equity: Optional[float] = None,
+    debt_to_equity: Optional[float] = None,
+    current: Optional[float] = None,
+    quick: Optional[float] = None,
+    cash: Optional[float] = None,
+    ev_to_sales: Optional[float] = None,
+    ev_to_ebitda: Optional[float] = None,
+    enterprise_value: Optional[float] = None,
+    free_cash_flow: Optional[float] = None,
+    ticker_any_of: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    cik_any_of: Optional[str] = None,
+    cik_gt: Optional[str] = None,
+    cik_gte: Optional[str] = None,
+    cik_lt: Optional[str] = None,
+    cik_lte: Optional[str] = None,
+    price_gt: Optional[float] = None,
+    price_gte: Optional[float] = None,
+    price_lt: Optional[float] = None,
+    price_lte: Optional[float] = None,
+    average_volume_gt: Optional[float] = None,
+    average_volume_gte: Optional[float] = None,
+    average_volume_lt: Optional[float] = None,
+    average_volume_lte: Optional[float] = None,
+    market_cap_gt: Optional[float] = None,
+    market_cap_gte: Optional[float] = None,
+    market_cap_lt: Optional[float] = None,
+    market_cap_lte: Optional[float] = None,
+    earnings_per_share_gt: Optional[float] = None,
+    earnings_per_share_gte: Optional[float] = None,
+    earnings_per_share_lt: Optional[float] = None,
+    earnings_per_share_lte: Optional[float] = None,
+    price_to_earnings_gt: Optional[float] = None,
+    price_to_earnings_gte: Optional[float] = None,
+    price_to_earnings_lt: Optional[float] = None,
+    price_to_earnings_lte: Optional[float] = None,
+    price_to_book_gt: Optional[float] = None,
+    price_to_book_gte: Optional[float] = None,
+    price_to_book_lt: Optional[float] = None,
+    price_to_book_lte: Optional[float] = None,
+    price_to_sales_gt: Optional[float] = None,
+    price_to_sales_gte: Optional[float] = None,
+    price_to_sales_lt: Optional[float] = None,
+    price_to_sales_lte: Optional[float] = None,
+    price_to_cash_flow_gt: Optional[float] = None,
+    price_to_cash_flow_gte: Optional[float] = None,
+    price_to_cash_flow_lt: Optional[float] = None,
+    price_to_cash_flow_lte: Optional[float] = None,
+    price_to_free_cash_flow_gt: Optional[float] = None,
+    price_to_free_cash_flow_gte: Optional[float] = None,
+    price_to_free_cash_flow_lt: Optional[float] = None,
+    price_to_free_cash_flow_lte: Optional[float] = None,
+    dividend_yield_gt: Optional[float] = None,
+    dividend_yield_gte: Optional[float] = None,
+    dividend_yield_lt: Optional[float] = None,
+    dividend_yield_lte: Optional[float] = None,
+    return_on_assets_gt: Optional[float] = None,
+    return_on_assets_gte: Optional[float] = None,
+    return_on_assets_lt: Optional[float] = None,
+    return_on_assets_lte: Optional[float] = None,
+    return_on_equity_gt: Optional[float] = None,
+    return_on_equity_gte: Optional[float] = None,
+    return_on_equity_lt: Optional[float] = None,
+    return_on_equity_lte: Optional[float] = None,
+    debt_to_equity_gt: Optional[float] = None,
+    debt_to_equity_gte: Optional[float] = None,
+    debt_to_equity_lt: Optional[float] = None,
+    debt_to_equity_lte: Optional[float] = None,
+    current_gt: Optional[float] = None,
+    current_gte: Optional[float] = None,
+    current_lt: Optional[float] = None,
+    current_lte: Optional[float] = None,
+    quick_gt: Optional[float] = None,
+    quick_gte: Optional[float] = None,
+    quick_lt: Optional[float] = None,
+    quick_lte: Optional[float] = None,
+    cash_gt: Optional[float] = None,
+    cash_gte: Optional[float] = None,
+    cash_lt: Optional[float] = None,
+    cash_lte: Optional[float] = None,
+    ev_to_sales_gt: Optional[float] = None,
+    ev_to_sales_gte: Optional[float] = None,
+    ev_to_sales_lt: Optional[float] = None,
+    ev_to_sales_lte: Optional[float] = None,
+    ev_to_ebitda_gt: Optional[float] = None,
+    ev_to_ebitda_gte: Optional[float] = None,
+    ev_to_ebitda_lt: Optional[float] = None,
+    ev_to_ebitda_lte: Optional[float] = None,
+    enterprise_value_gt: Optional[float] = None,
+    enterprise_value_gte: Optional[float] = None,
+    enterprise_value_lt: Optional[float] = None,
+    enterprise_value_lte: Optional[float] = None,
+    free_cash_flow_gt: Optional[float] = None,
+    free_cash_flow_gte: Optional[float] = None,
+    free_cash_flow_lt: Optional[float] = None,
+    free_cash_flow_lte: Optional[float] = None,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve comprehensive financial ratios data for stock screening and comparative analysis,
+    combining trailing twelve-month (TTM) financials with current stock prices.
+
+    This endpoint provides key valuation, profitability, liquidity, and leverage metrics calculated
+    from the most recent TTM financial data and the latest trading day's stock price. Unlike
+    historical financial statement endpoints, this is designed for stock screening and real-time
+    comparative analysis across companies.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/financial-ratios
+
+    Parameters
+    ----------
+    ticker : str, optional
+        Stock ticker symbol for the company.
+        Example: "AAPL"
+
+    cik : str, optional
+        Central Index Key (CIK) assigned by the SEC.
+        Example: "320193" for Apple
+
+    price : float, optional
+        Stock price used in ratio calculations (typically closing price).
+
+    average_volume : float, optional
+        Average trading volume over the last 30 trading days.
+
+    market_cap : float, optional
+        Market capitalization (stock price × total shares outstanding).
+
+    earnings_per_share : float, optional
+        Earnings per share (net income ÷ weighted shares outstanding).
+
+    price_to_earnings : float, optional
+        Price-to-earnings ratio (P/E = price ÷ EPS).
+        Only calculated when EPS is positive.
+
+    price_to_book : float, optional
+        Price-to-book ratio (P/B = price ÷ book value per share).
+
+    price_to_sales : float, optional
+        Price-to-sales ratio (P/S = price ÷ revenue per share).
+
+    price_to_cash_flow : float, optional
+        Price-to-cash-flow ratio (P/CF = price ÷ operating cash flow per share).
+        Only calculated when cash flow per share is positive.
+
+    price_to_free_cash_flow : float, optional
+        Price-to-free-cash-flow ratio (P/FCF = price ÷ free cash flow per share).
+        Only calculated when FCF per share is positive.
+
+    dividend_yield : float, optional
+        Dividend yield (annual dividends per share ÷ price).
+        Example: 0.044 represents 4.4% yield
+
+    return_on_assets : float, optional
+        Return on assets (ROA = net income ÷ total assets).
+        Example: 0.3075 represents 30.75% ROA
+
+    return_on_equity : float, optional
+        Return on equity (ROE = net income ÷ shareholders' equity).
+        Example: 1.5284 represents 152.84% ROE
+
+    debt_to_equity : float, optional
+        Debt-to-equity ratio ((current debt + long-term debt) ÷ equity).
+
+    current : float, optional
+        Current ratio (current assets ÷ current liabilities).
+
+    quick : float, optional
+        Quick ratio/acid-test ratio ((current assets - inventories) ÷ current liabilities).
+
+    cash : float, optional
+        Cash ratio (cash and equivalents ÷ current liabilities).
+
+    ev_to_sales : float, optional
+        Enterprise value to sales ratio (EV ÷ revenue).
+
+    ev_to_ebitda : float, optional
+        Enterprise value to EBITDA ratio (EV ÷ EBITDA).
+
+    enterprise_value : float, optional
+        Enterprise value (market cap + total debt - cash and equivalents).
+
+    free_cash_flow : float, optional
+        Free cash flow (operating cash flow - capital expenditures).
+
+    ticker_any_of : str, optional
+        Filter equal to any of the ticker values (comma-separated).
+        Example: "AAPL,MSFT,GOOGL"
+
+    ticker_gt : str, optional
+        Filter ticker greater than the value (lexicographic).
+
+    ticker_gte : str, optional
+        Filter ticker greater than or equal to the value.
+
+    ticker_lt : str, optional
+        Filter ticker less than the value.
+
+    ticker_lte : str, optional
+        Filter ticker less than or equal to the value.
+
+    cik_any_of : str, optional
+        Filter equal to any of the CIK values (comma-separated).
+
+    cik_gt : str, optional
+        Filter CIK greater than the value (lexicographic).
+
+    cik_gte : str, optional
+        Filter CIK greater than or equal to the value.
+
+    cik_lt : str, optional
+        Filter CIK less than the value.
+
+    cik_lte : str, optional
+        Filter CIK less than or equal to the value.
+
+    [Additional range parameters for all ratio fields follow the pattern:
+     {field}_gt, {field}_gte, {field}_lt, {field}_lte for filtering]
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 100, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "ticker.asc"
+        Example: "price_to_earnings.asc,market_cap.desc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing financial ratios data with the following fields:
+
+        Identification:
+        - ticker: Stock ticker symbol
+        - cik: SEC Central Index Key
+        - date: Date for which ratios are calculated (latest trading date)
+
+        Market Data:
+        - price: Stock price used in calculations
+        - average_volume: 30-day average trading volume
+        - market_cap: Market capitalization
+        - enterprise_value: Market cap + debt - cash
+        - free_cash_flow: Operating cash flow - CapEx
+
+        Valuation Ratios:
+        - price_to_earnings: P/E ratio (only if EPS > 0)
+        - price_to_book: P/B ratio
+        - price_to_sales: P/S ratio
+        - price_to_cash_flow: P/CF ratio (only if OCF per share > 0)
+        - price_to_free_cash_flow: P/FCF ratio (only if FCF per share > 0)
+        - ev_to_sales: EV/Sales ratio
+        - ev_to_ebitda: EV/EBITDA ratio
+
+        Profitability Ratios:
+        - earnings_per_share: EPS
+        - return_on_assets: ROA
+        - return_on_equity: ROE
+
+        Liquidity Ratios:
+        - current: Current ratio
+        - quick: Quick ratio (acid-test)
+        - cash: Cash ratio
+
+        Leverage Ratios:
+        - debt_to_equity: D/E ratio
+
+        Income:
+        - dividend_yield: Annual dividend yield
+
+    Understanding Financial Ratios
+    ------------------------------
+    Financial ratios are categorized into four main groups:
+
+    1. **Valuation Ratios** (how expensive is the stock?):
+       - **P/E (Price-to-Earnings)**: price / EPS
+         * Lower P/E → cheaper relative to earnings
+         * Higher P/E → more expensive or higher growth expectations
+         * Only calculated when EPS > 0 (profitable companies)
+       - **P/B (Price-to-Book)**: price / book value per share
+         * P/B < 1 → trading below book value
+         * P/B > 1 → market values company above accounting value
+       - **P/S (Price-to-Sales)**: price / revenue per share
+         * Useful for unprofitable growth companies
+         * Lower P/S → cheaper relative to sales
+       - **P/CF (Price-to-Cash-Flow)**: price / operating cash flow per share
+         * Alternative to P/E focusing on cash generation
+       - **EV/EBITDA**: enterprise value / EBITDA
+         * Accounts for debt, better for comparing leveraged companies
+         * Lower EV/EBITDA → cheaper on cash earnings basis
+
+    2. **Profitability Ratios** (how profitable is the business?):
+       - **ROA (Return on Assets)**: net income / total assets
+         * Measures asset efficiency
+         * Higher ROA → better at generating profit from assets
+       - **ROE (Return on Equity)**: net income / shareholders' equity
+         * Measures shareholder return
+         * Higher ROE → better returns for shareholders
+         * Can be inflated by high leverage
+
+    3. **Liquidity Ratios** (can the company pay bills?):
+       - **Current Ratio**: current assets / current liabilities
+         * > 1.0 → can cover short-term obligations
+         * < 1.0 → potential liquidity issues
+       - **Quick Ratio**: (current assets - inventory) / current liabilities
+         * More conservative, excludes inventory
+         * > 1.0 → strong immediate liquidity
+       - **Cash Ratio**: cash and equivalents / current liabilities
+         * Most conservative liquidity measure
+         * > 0.5 → very strong cash position
+
+    4. **Leverage Ratios** (how much debt does the company have?):
+       - **Debt-to-Equity**: total debt / shareholders' equity
+         * Higher ratio → more leveraged, higher financial risk
+         * Lower ratio → more conservative capital structure
+         * 0 → no debt (all equity financing)
+
+    Use Cases
+    ---------
+    1. **Stock Screening**: Filter stocks by ratio criteria to find investment candidates
+       meeting specific financial criteria (e.g., low P/E value stocks, high ROE quality stocks).
+
+    2. **Comparative Analysis**: Compare financial metrics across companies in the same
+       industry to identify leaders and laggards in profitability, efficiency, and valuation.
+
+    3. **Financial Health Assessment**: Evaluate liquidity, leverage, and profitability
+       ratios to assess overall financial health and stability.
+
+    4. **Investment Strategy Implementation**: Build factor-based investment strategies
+       (value, quality, momentum) using ratio-based screening and ranking.
+
+    Examples
+    --------
+    Example 1: Get current ratios for Apple
+        list_stock_ratios(ticker="AAPL")
+
+        Returns all current financial ratios for Apple using TTM financials and latest price.
+
+    Example 2: Screen for value stocks (low P/E, high dividend yield)
+        list_stock_ratios(
+            price_to_earnings_lt=15,
+            dividend_yield_gt=0.03,
+            market_cap_gte=1000000000,
+            sort="price_to_earnings.asc",
+            limit=50
+        )
+
+        Finds stocks with P/E < 15, dividend yield > 3%, market cap >= $1B,
+        sorted by P/E ratio ascending (cheapest first).
+
+    Example 3: Screen for quality growth stocks (high ROE, low debt)
+        list_stock_ratios(
+            return_on_equity_gt=0.20,
+            debt_to_equity_lt=0.5,
+            earnings_per_share_gt=0,
+            sort="return_on_equity.desc",
+            limit=100
+        )
+
+        Finds profitable stocks with ROE > 20%, D/E < 0.5 (low debt), positive earnings,
+        sorted by ROE descending (highest quality first).
+
+    Example 4: Screen for high cash flow generators
+        list_stock_ratios(
+            price_to_free_cash_flow_lt=20,
+            free_cash_flow_gt=1000000000,
+            current_gte=1.5,
+            sort="free_cash_flow.desc"
+        )
+
+        Finds stocks with P/FCF < 20, FCF > $1B, current ratio >= 1.5 (good liquidity),
+        sorted by free cash flow descending.
+
+    Example 5: Compare tech giants
+        list_stock_ratios(
+            ticker_any_of="AAPL,MSFT,GOOGL,META,AMZN",
+            sort="ticker.asc"
+        )
+
+        Returns current ratios for major tech companies for comparative analysis.
+
+    Notes
+    -----
+    - **TTM Data**: All ratios use trailing twelve-month (TTM) financial data combined with
+      the most recent trading day's stock price. This provides the most current view of
+      company fundamentals and valuation.
+
+    - **Missing Ratios**: Some ratios are only calculated when the denominator is positive:
+      * price_to_earnings: Only when earnings_per_share > 0
+      * price_to_cash_flow: Only when operating cash flow per share > 0
+      * price_to_free_cash_flow: Only when free cash flow per share > 0
+      * For unprofitable companies, these ratios will be null/missing
+
+    - **Enterprise Value**: Calculated as market_cap + total_debt - cash_and_equivalents.
+      Represents the theoretical takeover price and is useful for comparing companies with
+      different capital structures.
+
+    - **Free Cash Flow**: Calculated as operating_cash_flow - capital_expenditures. Represents
+      cash available for distribution to shareholders or debt reduction after maintaining/
+      growing the business.
+
+    - **Ratio Interpretation**: Compare ratios within the same industry for meaningful insights:
+      * Tech companies typically have higher P/E ratios than utilities
+      * Capital-intensive industries have lower ROA than asset-light businesses
+      * Banks have different liquidity ratio norms than industrial companies
+
+    - **Screening Best Practices**:
+      * Combine multiple criteria for robust screening (e.g., value + quality + momentum)
+      * Use appropriate industry context when setting thresholds
+      * Consider market cap minimum to ensure liquidity
+      * Verify fundamentals beyond ratios before investing
+
+    - **Decimal vs Percentage**: Ratios are returned as decimals:
+      * dividend_yield=0.044 means 4.4% yield
+      * return_on_equity=0.25 means 25% ROE
+      * Multiply by 100 for percentage representation
+
+    - **Negative Values**: Some ratios can be negative:
+      * Negative ROA/ROE → company is losing money
+      * Negative debt_to_equity → not possible, indicates data issue
+      * Negative free_cash_flow → company consuming cash
+
+    - **Sorting**: Default sort is ticker.asc. Use sort parameter for custom ordering:
+      * "price_to_earnings.asc" → cheapest P/E first
+      * "return_on_equity.desc" → highest ROE first
+      * "market_cap.desc,price_to_earnings.asc" → large caps with low P/E
+
+    - **Volume Liquidity**: average_volume shows 30-day average trading volume. Higher
+      volume indicates better liquidity for entering/exiting positions. Consider minimum
+      volume thresholds for tradability.
+
+    - **Data Currency**: date field shows when ratios were calculated. Ratios use the most
+      recent TTM financials available and the latest trading day's price data.
+
+    - **Pagination**: For large screening results, use limit parameter and next_url from
+      response metadata. Default limit is 100, maximum is 50000.
+
+    - **Comparison with Historical Ratios**: This endpoint provides current/latest ratios.
+      For historical ratio trends over time, use the list_financials_ratios endpoint which
+      provides ratios from SEC filing dates.
+
+    - **Multi-Factor Screening**: Combine filters to implement factor strategies:
+      * Value: low price_to_earnings, low price_to_book, high dividend_yield
+      * Quality: high return_on_equity, high return_on_assets, low debt_to_equity
+      * Growth: high earnings growth (calculate from financials), expanding margins
+      * Momentum: Use with price data to identify trends
+      * Defensive: high current ratio, low debt_to_equity, stable dividend_yield
+
+    - **Sector Benchmarks**: Typical ratio ranges vary by sector:
+      * Technology: High P/E (20-40+), high ROE (20%+), low debt
+      * Utilities: Low P/E (10-15), low ROE (8-12%), moderate debt
+      * Financials: Low P/B (0.5-2), high ROE (10-15%), leverage is normal
+      * Industrials: Moderate across all ratios
+      * Consumer Staples: Moderate P/E (15-25), stable margins
+
+    - **Valuation Context**: Absolute ratio levels should be interpreted with market context:
+      * Bull markets: Higher average P/E ratios acceptable
+      * Bear markets: Flight to quality, focus on low debt and high cash
+      * Rising rates: Lower P/E multiples, favor profitable companies
+      * Recession: Emphasize liquidity ratios and low leverage
+    """
+    try:
+        # Build the params dictionary with all range parameters
+        results = polygon_client._get(
+            "/stocks/financials/v1/ratios",
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "ticker": ticker,
+                        "cik": cik,
+                        "price": price,
+                        "average_volume": average_volume,
+                        "market_cap": market_cap,
+                        "earnings_per_share": earnings_per_share,
+                        "price_to_earnings": price_to_earnings,
+                        "price_to_book": price_to_book,
+                        "price_to_sales": price_to_sales,
+                        "price_to_cash_flow": price_to_cash_flow,
+                        "price_to_free_cash_flow": price_to_free_cash_flow,
+                        "dividend_yield": dividend_yield,
+                        "return_on_assets": return_on_assets,
+                        "return_on_equity": return_on_equity,
+                        "debt_to_equity": debt_to_equity,
+                        "current": current,
+                        "quick": quick,
+                        "cash": cash,
+                        "ev_to_sales": ev_to_sales,
+                        "ev_to_ebitda": ev_to_ebitda,
+                        "enterprise_value": enterprise_value,
+                        "free_cash_flow": free_cash_flow,
+                        "ticker.any_of": ticker_any_of,
+                        "ticker.gt": ticker_gt,
+                        "ticker.gte": ticker_gte,
+                        "ticker.lt": ticker_lt,
+                        "ticker.lte": ticker_lte,
+                        "cik.any_of": cik_any_of,
+                        "cik.gt": cik_gt,
+                        "cik.gte": cik_gte,
+                        "cik.lt": cik_lt,
+                        "cik.lte": cik_lte,
+                        "price.gt": price_gt,
+                        "price.gte": price_gte,
+                        "price.lt": price_lt,
+                        "price.lte": price_lte,
+                        "average_volume.gt": average_volume_gt,
+                        "average_volume.gte": average_volume_gte,
+                        "average_volume.lt": average_volume_lt,
+                        "average_volume.lte": average_volume_lte,
+                        "market_cap.gt": market_cap_gt,
+                        "market_cap.gte": market_cap_gte,
+                        "market_cap.lt": market_cap_lt,
+                        "market_cap.lte": market_cap_lte,
+                        "earnings_per_share.gt": earnings_per_share_gt,
+                        "earnings_per_share.gte": earnings_per_share_gte,
+                        "earnings_per_share.lt": earnings_per_share_lt,
+                        "earnings_per_share.lte": earnings_per_share_lte,
+                        "price_to_earnings.gt": price_to_earnings_gt,
+                        "price_to_earnings.gte": price_to_earnings_gte,
+                        "price_to_earnings.lt": price_to_earnings_lt,
+                        "price_to_earnings.lte": price_to_earnings_lte,
+                        "price_to_book.gt": price_to_book_gt,
+                        "price_to_book.gte": price_to_book_gte,
+                        "price_to_book.lt": price_to_book_lt,
+                        "price_to_book.lte": price_to_book_lte,
+                        "price_to_sales.gt": price_to_sales_gt,
+                        "price_to_sales.gte": price_to_sales_gte,
+                        "price_to_sales.lt": price_to_sales_lt,
+                        "price_to_sales.lte": price_to_sales_lte,
+                        "price_to_cash_flow.gt": price_to_cash_flow_gt,
+                        "price_to_cash_flow.gte": price_to_cash_flow_gte,
+                        "price_to_cash_flow.lt": price_to_cash_flow_lt,
+                        "price_to_cash_flow.lte": price_to_cash_flow_lte,
+                        "price_to_free_cash_flow.gt": price_to_free_cash_flow_gt,
+                        "price_to_free_cash_flow.gte": price_to_free_cash_flow_gte,
+                        "price_to_free_cash_flow.lt": price_to_free_cash_flow_lt,
+                        "price_to_free_cash_flow.lte": price_to_free_cash_flow_lte,
+                        "dividend_yield.gt": dividend_yield_gt,
+                        "dividend_yield.gte": dividend_yield_gte,
+                        "dividend_yield.lt": dividend_yield_lt,
+                        "dividend_yield.lte": dividend_yield_lte,
+                        "return_on_assets.gt": return_on_assets_gt,
+                        "return_on_assets.gte": return_on_assets_gte,
+                        "return_on_assets.lt": return_on_assets_lt,
+                        "return_on_assets.lte": return_on_assets_lte,
+                        "return_on_equity.gt": return_on_equity_gt,
+                        "return_on_equity.gte": return_on_equity_gte,
+                        "return_on_equity.lt": return_on_equity_lt,
+                        "return_on_equity.lte": return_on_equity_lte,
+                        "debt_to_equity.gt": debt_to_equity_gt,
+                        "debt_to_equity.gte": debt_to_equity_gte,
+                        "debt_to_equity.lt": debt_to_equity_lt,
+                        "debt_to_equity.lte": debt_to_equity_lte,
+                        "current.gt": current_gt,
+                        "current.gte": current_gte,
+                        "current.lt": current_lt,
+                        "current.lte": current_lte,
+                        "quick.gt": quick_gt,
+                        "quick.gte": quick_gte,
+                        "quick.lt": quick_lt,
+                        "quick.lte": quick_lte,
+                        "cash.gt": cash_gt,
+                        "cash.gte": cash_gte,
+                        "cash.lt": cash_lt,
+                        "cash.lte": cash_lte,
+                        "ev_to_sales.gt": ev_to_sales_gt,
+                        "ev_to_sales.gte": ev_to_sales_gte,
+                        "ev_to_sales.lt": ev_to_sales_lt,
+                        "ev_to_sales.lte": ev_to_sales_lte,
+                        "ev_to_ebitda.gt": ev_to_ebitda_gt,
+                        "ev_to_ebitda.gte": ev_to_ebitda_gte,
+                        "ev_to_ebitda.lt": ev_to_ebitda_lt,
+                        "ev_to_ebitda.lte": ev_to_ebitda_lte,
+                        "enterprise_value.gt": enterprise_value_gt,
+                        "enterprise_value.gte": enterprise_value_gte,
+                        "enterprise_value.lt": enterprise_value_lt,
+                        "enterprise_value.lte": enterprise_value_lte,
+                        "free_cash_flow.gt": free_cash_flow_gt,
+                        "free_cash_flow.gte": free_cash_flow_gte,
+                        "free_cash_flow.lt": free_cash_flow_lt,
+                        "free_cash_flow.lte": free_cash_flow_lte,
+                        "limit": limit,
+                        "sort": sort,
+                    }.items()
+                    if v is not None
+                },
+            },
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_ipos(
     ticker: Optional[str] = None,
+    us_code: Optional[str] = None,
+    isin: Optional[str] = None,
     listing_date: Optional[Union[str, datetime, date]] = None,
     listing_date_lt: Optional[Union[str, datetime, date]] = None,
     listing_date_lte: Optional[Union[str, datetime, date]] = None,
@@ -773,11 +5265,131 @@ async def list_ipos(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Retrieve upcoming or historical IPOs.
+    Retrieve comprehensive information on Initial Public Offerings (IPOs), including upcoming and
+    historical events, starting from the year 2008. This endpoint provides key details such as issuer
+    name, ticker symbol, security type, IPO date, number of shares offered, expected price ranges,
+    final issue prices, and offering sizes. Users can filter results by IPO status (e.g., pending,
+    new, rumors, historical) to target their research and inform investment decisions.
+
+    Reference: https://polygon.io/docs/rest/stocks/corporate-actions/ipos
+
+    Parameters:
+    - ticker: Case-sensitive ticker symbol (e.g., "TSLA" for Tesla Inc.)
+    - us_code: Unique nine-character alphanumeric code that identifies a North American financial
+               security for facilitating clearing and settlement of trades
+    - isin: International Securities Identification Number - unique twelve-digit code assigned to
+            every security issuance in the world
+    - listing_date: Specific listing date (YYYY-MM-DD) - the first trading date for the newly listed entity
+    - listing_date_gte: Range by listing_date - greater than or equal to
+    - listing_date_gt: Range by listing_date - greater than
+    - listing_date_lte: Range by listing_date - less than or equal to
+    - listing_date_lt: Range by listing_date - less than
+    - ipo_status: Filter by IPO status:
+      * "rumor" - Early stage, unconfirmed reports of potential IPO
+      * "pending" - Confirmed IPO scheduled for future date
+      * "new" - Listed today (on listing day)
+      * "history" - Historical IPOs (after listing day)
+      * "direct_listing_process" - Direct listing without traditional IPO process
+      * "postponed" - IPO delayed to future date
+      * "withdrawn" - IPO cancelled
+    - limit: Limit the number of results returned (default: 10, max: 1000)
+    - sort: Sort field used for ordering (e.g., "listing_date")
+    - order: Order results based on the sort field ("asc" or "desc")
+
+    Response includes:
+    - results[]: Array of IPO events with detailed information:
+      - ticker: Ticker symbol of the IPO event
+      - issuer_name: Name of the company issuing shares
+      - listing_date: First trading date for the newly listed entity
+      - announced_date: Date when the IPO event was announced
+      - last_updated: Date when the IPO event was last modified
+      - ipo_status: Current status (rumor, pending, new, history, direct_listing_process, etc.)
+
+      Pricing information:
+      - final_issue_price: Price set by company and underwriters before IPO goes live
+      - lowest_offer_price: Lowest price within the IPO price range
+      - highest_offer_price: Highest price within the IPO price range
+
+      Shares information:
+      - min_shares_offered: Lower limit of shares company is willing to sell
+      - max_shares_offered: Upper limit of shares company is offering
+      - shares_outstanding: Total shares issued and held by investors after IPO
+      - lot_size: Minimum number of shares that can be bought/sold in single transaction
+
+      Security details:
+      - security_type: Classification of the stock (e.g., "CS" for Common Stock)
+      - security_description: Description of the security (e.g., "Ordinary Shares")
+      - isin: International Securities Identification Number
+      - us_code: Nine-character alphanumeric security identifier
+      - currency_code: Underlying currency of the security
+
+      Market information:
+      - primary_exchange: Market Identifier Code (MIC) of the primary exchange (e.g., "XNAS" for NASDAQ)
+      - total_offer_size: Total amount raised by the company for IPO
+      - issue_start_date: Start date of the IPO offering period
+      - issue_end_date: End date of the IPO offering period
+
+    - next_url: If present, use to fetch the next page of data
+    - request_id: Server-assigned request identifier
+    - status: Response status (e.g., "OK")
+
+    IPO Status Lifecycle:
+    1. "rumor" or "pending" - Initial stages before listing
+    2. "new" - On the listing day
+    3. "history" - After the listing day
+
+    Special status "direct_listing_process" indicates a company listing shares directly on an
+    exchange without using investment banks or intermediaries (also called DPO - Direct Public Offering).
+
+    Use Cases:
+    - IPO research: Discover upcoming investment opportunities and evaluate IPO characteristics
+    - Market trend analysis: Analyze IPO activity patterns across sectors and time periods
+    - Investment screening: Filter IPOs by price range, offering size, or listing date
+    - Historical event comparison: Study past IPOs to understand pricing and performance patterns
+
+    Example: list_ipos() returns upcoming IPOs with default parameters showing recent and
+             pending listings
+
+    Example: list_ipos(ipo_status="pending", limit=50) returns up to 50 confirmed upcoming
+             IPOs that are scheduled but haven't listed yet
+
+    Example: list_ipos(listing_date_gte="2024-01-01", listing_date_lte="2024-12-31")
+             returns all IPOs that listed during 2024 for year-end analysis
+
+    Example: list_ipos(ticker="RAPP") returns detailed IPO information for Rapport Therapeutics
+             including pricing, shares offered, and listing details
+
+    Example: list_ipos(ipo_status="history", sort="listing_date", order="desc", limit=20)
+             returns the 20 most recent historical IPOs sorted by listing date
+
+    Note: IPO considerations and best practices:
+    - Data available starting from 2008 - comprehensive historical coverage
+    - IPO status progression: rumor → pending → new → history
+    - Price range (lowest_offer_price to highest_offer_price) shows company's expected valuation
+    - Final_issue_price is the actual IPO price set before going live
+    - Total_offer_size = final_issue_price × shares offered (approximately)
+    - Direct listings (direct_listing_process status) skip traditional IPO process:
+      * No underwriters or investment banks involved
+      * No new shares issued (existing shares sold by insiders)
+      * No lock-up period for existing shareholders
+      * Examples: Spotify (2018), Slack (2019), Coinbase (2021)
+    - Lot_size indicates minimum purchase quantity (typically 100 shares)
+    - Primary_exchange codes (MIC):
+      * XNAS = NASDAQ
+      * XNYS = NYSE
+      * Other MIC codes for different exchanges
+    - Monitor pending IPOs for upcoming investment opportunities
+    - Compare IPO characteristics: pricing, offering size, shares outstanding
+    - Track postponed or withdrawn IPOs to understand market conditions
+    - Use listing_date ranges to analyze IPO activity during specific periods
+    - Filter by ipo_status to focus on relevant stage (rumors, pending, or historical)
+    - Historical IPOs useful for studying performance patterns and pricing accuracy
     """
     try:
         results = polygon_client.vx.list_ipos(
             ticker=ticker,
+            us_code=us_code,
+            isin=isin,
             listing_date=listing_date,
             listing_date_lt=listing_date_lt,
             listing_date_lte=listing_date_lte,
@@ -799,18 +5411,356 @@ async def list_ipos(
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_short_interest(
     ticker: Optional[str] = None,
+    days_to_cover: Optional[float] = None,
     settlement_date: Optional[Union[str, datetime, date]] = None,
-    settlement_date_lt: Optional[Union[str, datetime, date]] = None,
-    settlement_date_lte: Optional[Union[str, datetime, date]] = None,
+    avg_daily_volume: Optional[int] = None,
+    ticker_any_of: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    days_to_cover_any_of: Optional[str] = None,
+    days_to_cover_gt: Optional[float] = None,
+    days_to_cover_gte: Optional[float] = None,
+    days_to_cover_lt: Optional[float] = None,
+    days_to_cover_lte: Optional[float] = None,
+    settlement_date_any_of: Optional[str] = None,
     settlement_date_gt: Optional[Union[str, datetime, date]] = None,
     settlement_date_gte: Optional[Union[str, datetime, date]] = None,
+    settlement_date_lt: Optional[Union[str, datetime, date]] = None,
+    settlement_date_lte: Optional[Union[str, datetime, date]] = None,
+    avg_daily_volume_any_of: Optional[str] = None,
+    avg_daily_volume_gt: Optional[int] = None,
+    avg_daily_volume_gte: Optional[int] = None,
+    avg_daily_volume_lt: Optional[int] = None,
+    avg_daily_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
-    order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Retrieve short interest data for stocks.
+    Retrieve bi-monthly aggregated short interest data reported to FINRA by broker-dealers,
+    providing insights into market sentiment and potential short squeeze opportunities.
+
+    Short interest represents the total number of shares sold short but not yet covered or closed
+    out, serving as a key indicator of bearish market sentiment. This data is reported bi-monthly
+    to FINRA and includes metrics such as days to cover, which helps assess short squeeze potential
+    and market positioning.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/short-interest
+
+    Parameters
+    ----------
+    ticker : str, optional
+        The primary ticker symbol for the stock.
+        Example: "GME"
+
+    days_to_cover : float, optional
+        Calculated as short_interest ÷ avg_daily_volume, representing the estimated
+        number of days it would take to cover all short positions based on average volume.
+
+    settlement_date : str or date, optional
+        The date (YYYY-MM-DD) on which short interest data is considered settled,
+        based on exchange reporting schedules.
+        Example: "2025-03-14"
+
+    avg_daily_volume : int, optional
+        The average daily trading volume over a specified period, used to contextualize
+        short interest.
+
+    ticker_any_of : str, optional
+        Filter equal to any of the ticker values (comma-separated).
+        Example: "GME,AMC,TSLA"
+
+    ticker_gt : str, optional
+        Filter ticker greater than the value (lexicographic).
+
+    ticker_gte : str, optional
+        Filter ticker greater than or equal to the value.
+
+    ticker_lt : str, optional
+        Filter ticker less than the value.
+
+    ticker_lte : str, optional
+        Filter ticker less than or equal to the value.
+
+    days_to_cover_any_of : str, optional
+        Filter equal to any of the days_to_cover values (comma-separated).
+
+    days_to_cover_gt : float, optional
+        Filter days_to_cover greater than the value.
+
+    days_to_cover_gte : float, optional
+        Filter days_to_cover greater than or equal to the value.
+
+    days_to_cover_lt : float, optional
+        Filter days_to_cover less than the value.
+
+    days_to_cover_lte : float, optional
+        Filter days_to_cover less than or equal to the value.
+
+    settlement_date_any_of : str, optional
+        Filter equal to any of the settlement_date values (comma-separated).
+
+    settlement_date_gt : str or date, optional
+        Filter settlement_date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    settlement_date_gte : str or date, optional
+        Filter settlement_date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    settlement_date_lt : str or date, optional
+        Filter settlement_date less than the value.
+        Format: "YYYY-MM-DD"
+
+    settlement_date_lte : str or date, optional
+        Filter settlement_date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    avg_daily_volume_any_of : str, optional
+        Filter equal to any of the avg_daily_volume values (comma-separated).
+
+    avg_daily_volume_gt : int, optional
+        Filter avg_daily_volume greater than the value.
+
+    avg_daily_volume_gte : int, optional
+        Filter avg_daily_volume greater than or equal to the value.
+
+    avg_daily_volume_lt : int, optional
+        Filter avg_daily_volume less than the value.
+
+    avg_daily_volume_lte : int, optional
+        Filter avg_daily_volume less than or equal to the value.
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 10, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "ticker.asc"
+        Example: "days_to_cover.desc,ticker.asc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing short interest data with the following fields:
+
+        - ticker: Stock ticker symbol
+        - settlement_date: Date when short interest data is settled (YYYY-MM-DD)
+        - short_interest: Total shares sold short but not yet covered
+        - avg_daily_volume: Average daily trading volume
+        - days_to_cover: Estimated days to cover shorts (short_interest ÷ avg_daily_volume)
+
+    Understanding Short Interest
+    ----------------------------
+    Short interest provides critical insights into market sentiment and positioning:
+
+    1. **What is Short Interest?**
+       - Total shares sold short (borrowed and sold, expecting price to fall)
+       - Not yet covered (bought back to return to lender)
+       - Represents bearish positions in the stock
+
+    2. **Days to Cover** (short ratio):
+       - Formula: short_interest ÷ avg_daily_volume
+       - Interpretation:
+         * Low (0-3 days): Shorts can cover quickly, low squeeze risk
+         * Moderate (3-5 days): Some squeeze potential if buying pressure emerges
+         * High (5-7 days): Significant squeeze potential, difficult to cover quickly
+         * Very High (7+ days): Extreme squeeze risk, positions may be trapped
+       - Indicates how many days of average volume needed to close all shorts
+
+    3. **Short Interest Ratio** (% of float):
+       - Calculate: (short_interest ÷ shares outstanding) × 100
+       - High percentage (>20%): Heavy bearish positioning
+       - Combined with high days to cover → short squeeze setup
+
+    4. **Reporting Schedule**:
+       - Data reported bi-monthly to FINRA (twice per month)
+       - Settlement dates typically mid-month and end-of-month
+       - Reported by broker-dealers
+       - Represents snapshot at settlement date, not real-time
+
+    Short Squeeze Mechanics
+    -----------------------
+    A short squeeze occurs when heavily shorted stocks rise rapidly, forcing shorts
+    to cover positions by buying shares, further accelerating price increases:
+
+    1. **Setup Conditions**:
+       - High short interest (>20% of float)
+       - High days to cover (>5-7 days)
+       - Positive catalyst or buying pressure emerges
+       - Limited liquidity or low float
+
+    2. **Squeeze Process**:
+       - Stock price rises unexpectedly
+       - Shorts face losses, margin calls
+       - Forced covering creates buying pressure
+       - Price accelerates upward in self-reinforcing cycle
+       - Continues until shorts capitulate and cover
+
+    3. **Risk Factors**:
+       - Shorts have unlimited loss potential (stock can rise indefinitely)
+       - Margin calls force covering at inopportune times
+       - Coordinated buying can trigger squeezes (as seen in meme stock events)
+
+    Use Cases
+    ---------
+    1. **Market Sentiment Analysis**: Monitor short interest trends to gauge bearish
+       sentiment and identify heavily shorted stocks that may face selling pressure.
+
+    2. **Short Squeeze Prediction**: Identify potential short squeeze candidates by
+       screening for high days to cover combined with positive catalysts or momentum.
+
+    3. **Risk Management**: Track short interest in portfolio holdings to anticipate
+       volatility from potential squeezes or heavy bearish positioning.
+
+    4. **Trading Strategy Refinement**: Incorporate short interest data into trading
+       strategies for mean reversion, squeeze plays, or contrarian positioning.
+
+    Examples
+    --------
+    Example 1: Get short interest history for GameStop
+        list_short_interest(
+            ticker="GME",
+            limit=20,
+            sort="settlement_date.desc"
+        )
+
+        Returns last 20 short interest reports for GME showing historical short positioning.
+
+    Example 2: Find recent high short squeeze candidates
+        list_short_interest(
+            days_to_cover_gt=5,
+            settlement_date_gte="2025-01-01",
+            sort="days_to_cover.desc",
+            limit=50
+        )
+
+        Finds stocks with >5 days to cover since Jan 2025, sorted by days to cover
+        descending (highest squeeze potential first).
+
+    Example 3: Track short interest for multiple meme stocks
+        list_short_interest(
+            ticker_any_of="GME,AMC,BBBY,BB",
+            settlement_date_gte="2024-01-01",
+            sort="settlement_date.desc"
+        )
+
+        Returns short interest history for multiple heavily-watched stocks since 2024.
+
+    Example 4: Screen for low liquidity with high short interest
+        list_short_interest(
+            days_to_cover_gt=7,
+            avg_daily_volume_lt=1000000,
+            sort="days_to_cover.desc"
+        )
+
+        Finds stocks with very high days to cover (>7) and low volume (<1M shares/day),
+        indicating potential squeeze setups with limited liquidity.
+
+    Example 5: Monitor short interest trends for a specific stock
+        list_short_interest(
+            ticker="TSLA",
+            settlement_date_gte="2024-01-01",
+            sort="settlement_date.asc",
+            limit=100
+        )
+
+        Returns all Tesla short interest reports since 2024 in chronological order
+        for trend analysis.
+
+    Notes
+    -----
+    - **Bi-Monthly Reporting**: Short interest data is reported twice monthly to FINRA,
+      typically with settlement dates around the 15th and end of each month. Data lags
+      by several days from settlement date to publication.
+
+    - **Days to Cover Calculation**: days_to_cover = short_interest ÷ avg_daily_volume.
+      This assumes average volume remains constant and shorts cover at normal pace.
+      During squeezes, volume spikes dramatically, reducing actual covering time.
+
+    - **Not Real-Time**: Short interest represents a snapshot at the settlement date.
+      Actual short positions may have changed significantly by the time data is published.
+      Use list_short_volume for daily short selling activity.
+
+    - **Short Interest vs Short Volume**:
+      * Short Interest = Outstanding short positions (cumulative, bi-monthly)
+      * Short Volume = Daily short sale activity (transactions, daily)
+      * Use short interest for positioning, short volume for sentiment shifts
+
+    - **Interpretation Context**: High short interest isn't always bearish signal:
+      * May indicate rational skepticism about overvaluation
+      * Experienced shorts may have good reasons for bearish positions
+      * Not all heavily shorted stocks squeeze
+      * Consider fundamentals alongside short metrics
+
+    - **Float Percentage**: To calculate short interest as % of float:
+      * Get shares outstanding from ticker details
+      * Calculate: (short_interest ÷ shares outstanding) × 100
+      * >20% typically considered high
+      * >40% considered extremely high
+
+    - **Historical Patterns**: Analyze short interest trends over time:
+      * Rising short interest → increasing bearish sentiment
+      * Falling short interest → shorts covering or sentiment improving
+      * Stable short interest → entrenched bearish positioning
+      * Sudden drops → potential squeeze or bearish thesis broken
+
+    - **Combine with Price Action**: Most effective when combined with price data:
+      * Rising price + rising short interest → shorts fighting rally (squeeze risk)
+      * Falling price + falling short interest → shorts taking profits
+      * Rising price + falling short interest → squeeze potentially underway
+      * Falling price + rising short interest → bears in control
+
+    - **Liquidity Considerations**: avg_daily_volume provides context for short interest:
+      * High short interest with low volume → illiquid, higher squeeze risk
+      * High short interest with high volume → more liquid, easier to cover
+      * Compare to typical volume patterns for the stock
+
+    - **Regulatory Changes**: Short interest reporting rules and schedules may change.
+      FINRA publishes official short interest data; verify against official sources
+      for compliance and regulatory purposes.
+
+    - **Short Squeeze Examples**: Notable historical squeezes:
+      * Volkswagen (2008): Days to cover exceeded 100, briefly became world's most valuable company
+      * GameStop (2021): Days to cover ~6, sparked by retail coordination
+      * Tesla (multiple): High short interest squeezed repeatedly during 2020 rally
+      * Study these events to understand squeeze mechanics and dynamics
+
+    - **Risk Warning**: Short squeeze plays are highly speculative and volatile:
+      * Can reverse suddenly when buying pressure exhausts
+      * Fundamentals may not support elevated prices
+      * Regulatory or company actions can impact outcomes
+      * Use appropriate position sizing and risk management
+
+    - **Sorting Options**: Useful sorting strategies:
+      * "days_to_cover.desc" → Find highest squeeze candidates
+      * "settlement_date.desc" → Most recent data first
+      * "ticker.asc" → Alphabetical for systematic analysis
+      * "avg_daily_volume.asc" → Find illiquid candidates
+
+    - **Screening Best Practices**: Effective short interest screening:
+      * Combine days_to_cover threshold with volume filters
+      * Look for trend changes (compare to prior periods)
+      * Cross-reference with news/catalysts
+      * Verify float calculations for accuracy
+      * Monitor multiple settlement dates for trend confirmation
+
+    - **Pagination**: For large screening results, use limit parameter and next_url
+      from response metadata. Default limit is 10, maximum is 50000.
+
+    - **Data Quality**: While FINRA data is authoritative, reporting may have errors:
+      * Corporate actions (splits, offerings) affect calculations
+      * Float changes impact short interest percentages
+      * Verify unusually high/low values
+      * Cross-reference with company filings for share counts
     """
     try:
         results = polygon_client.list_short_interest(
@@ -822,8 +5772,33 @@ async def list_short_interest(
             settlement_date_gte=settlement_date_gte,
             limit=limit,
             sort=sort,
-            order=order,
-            params=params,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "days_to_cover": days_to_cover,
+                        "avg_daily_volume": avg_daily_volume,
+                        "ticker.any_of": ticker_any_of,
+                        "ticker.gt": ticker_gt,
+                        "ticker.gte": ticker_gte,
+                        "ticker.lt": ticker_lt,
+                        "ticker.lte": ticker_lte,
+                        "days_to_cover.any_of": days_to_cover_any_of,
+                        "days_to_cover.gt": days_to_cover_gt,
+                        "days_to_cover.gte": days_to_cover_gte,
+                        "days_to_cover.lt": days_to_cover_lt,
+                        "days_to_cover.lte": days_to_cover_lte,
+                        "settlement_date.any_of": settlement_date_any_of,
+                        "avg_daily_volume.any_of": avg_daily_volume_any_of,
+                        "avg_daily_volume.gt": avg_daily_volume_gt,
+                        "avg_daily_volume.gte": avg_daily_volume_gte,
+                        "avg_daily_volume.lt": avg_daily_volume_lt,
+                        "avg_daily_volume.lte": avg_daily_volume_lte,
+                    }.items()
+                    if v is not None
+                },
+            },
             raw=True,
         )
 
@@ -836,17 +5811,383 @@ async def list_short_interest(
 async def list_short_volume(
     ticker: Optional[str] = None,
     date: Optional[Union[str, datetime, date]] = None,
-    date_lt: Optional[Union[str, datetime, date]] = None,
-    date_lte: Optional[Union[str, datetime, date]] = None,
+    short_volume_ratio: Optional[float] = None,
+    total_volume: Optional[int] = None,
+    ticker_any_of: Optional[str] = None,
+    ticker_gt: Optional[str] = None,
+    ticker_gte: Optional[str] = None,
+    ticker_lt: Optional[str] = None,
+    ticker_lte: Optional[str] = None,
+    date_any_of: Optional[str] = None,
     date_gt: Optional[Union[str, datetime, date]] = None,
     date_gte: Optional[Union[str, datetime, date]] = None,
+    date_lt: Optional[Union[str, datetime, date]] = None,
+    date_lte: Optional[Union[str, datetime, date]] = None,
+    short_volume_ratio_any_of: Optional[str] = None,
+    short_volume_ratio_gt: Optional[float] = None,
+    short_volume_ratio_gte: Optional[float] = None,
+    short_volume_ratio_lt: Optional[float] = None,
+    short_volume_ratio_lte: Optional[float] = None,
+    total_volume_any_of: Optional[str] = None,
+    total_volume_gt: Optional[int] = None,
+    total_volume_gte: Optional[int] = None,
+    total_volume_lt: Optional[int] = None,
+    total_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
-    order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Retrieve short volume data for stocks.
+    Retrieve daily aggregated short sale volume data reported to FINRA from off-exchange trading
+    venues and alternative trading systems (ATS), enabling real-time monitoring of short-selling activity.
+
+    Unlike short interest (which measures outstanding short positions bi-monthly), short volume captures
+    the daily trading activity of short sales. This provides immediate insights into market sentiment
+    shifts, trading behavior patterns, and potential price movements, helping traders detect trends
+    before they appear in lagging short interest reports.
+
+    Official API Documentation:
+    https://polygon.io/docs/rest/stocks/fundamentals/short-volume
+
+    Parameters
+    ----------
+    ticker : str, optional
+        The primary ticker symbol for the stock.
+        Example: "TSLA"
+
+    date : str or date, optional
+        The date of trade activity reported.
+        Format: "YYYY-MM-DD"
+        Example: "2025-03-25"
+
+    short_volume_ratio : float, optional
+        The percentage of total volume that was sold short.
+        Calculated as (short_volume / total_volume) × 100
+        Example: 31.57 represents 31.57%
+
+    total_volume : int, optional
+        Total reported volume across all venues for the ticker on the given date.
+
+    ticker_any_of : str, optional
+        Filter equal to any of the ticker values (comma-separated).
+        Example: "TSLA,NVDA,AMD"
+
+    ticker_gt : str, optional
+        Filter ticker greater than the value (lexicographic).
+
+    ticker_gte : str, optional
+        Filter ticker greater than or equal to the value.
+
+    ticker_lt : str, optional
+        Filter ticker less than the value.
+
+    ticker_lte : str, optional
+        Filter ticker less than or equal to the value.
+
+    date_any_of : str, optional
+        Filter equal to any of the date values (comma-separated).
+
+    date_gt : str or date, optional
+        Filter date greater than the value.
+        Format: "YYYY-MM-DD"
+
+    date_gte : str or date, optional
+        Filter date greater than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    date_lt : str or date, optional
+        Filter date less than the value.
+        Format: "YYYY-MM-DD"
+
+    date_lte : str or date, optional
+        Filter date less than or equal to the value.
+        Format: "YYYY-MM-DD"
+
+    short_volume_ratio_any_of : str, optional
+        Filter equal to any of the short_volume_ratio values (comma-separated).
+
+    short_volume_ratio_gt : float, optional
+        Filter short_volume_ratio greater than the value.
+
+    short_volume_ratio_gte : float, optional
+        Filter short_volume_ratio greater than or equal to the value.
+
+    short_volume_ratio_lt : float, optional
+        Filter short_volume_ratio less than the value.
+
+    short_volume_ratio_lte : float, optional
+        Filter short_volume_ratio less than or equal to the value.
+
+    total_volume_any_of : str, optional
+        Filter equal to any of the total_volume values (comma-separated).
+
+    total_volume_gt : int, optional
+        Filter total_volume greater than the value.
+
+    total_volume_gte : int, optional
+        Filter total_volume greater than or equal to the value.
+
+    total_volume_lt : int, optional
+        Filter total_volume less than the value.
+
+    total_volume_lte : int, optional
+        Filter total_volume less than or equal to the value.
+
+    limit : int, optional
+        Maximum number of results to return.
+        Default: 10, Maximum: 50000
+
+    sort : str, optional
+        Comma-separated list of sort columns with direction.
+        Format: "field.asc" or "field.desc"
+        Default: "ticker.asc"
+        Example: "short_volume_ratio.desc,date.asc"
+
+    params : dict, optional
+        Additional query parameters for advanced filtering.
+
+    Returns
+    -------
+    str
+        CSV-formatted string containing daily short volume data with the following fields:
+
+        Basic Information:
+        - ticker: Stock ticker symbol
+        - date: Trade date (YYYY-MM-DD)
+        - total_volume: Total reported volume across all venues
+        - short_volume: Total shares sold short
+        - short_volume_ratio: Percentage of volume sold short ((short_volume / total_volume) × 100)
+
+        Exempt vs Non-Exempt:
+        - exempt_volume: Short volume exempt from Regulation SHO
+        - non_exempt_volume: Short volume subject to Regulation SHO (short_volume - exempt_volume)
+
+        Venue Breakdown:
+        - nyse_short_volume: Short volume from NYSE facilities (non-exempt)
+        - nyse_short_volume_exempt: Short volume from NYSE (exempt)
+        - nasdaq_carteret_short_volume: Short volume from Nasdaq Carteret facility (non-exempt)
+        - nasdaq_carteret_short_volume_exempt: Short volume from Nasdaq Carteret (exempt)
+        - nasdaq_chicago_short_volume: Short volume from Nasdaq Chicago facility (non-exempt)
+        - nasdaq_chicago_short_volume_exempt: Short volume from Nasdaq Chicago (exempt)
+        - adf_short_volume: Short volume via Alternative Display Facility (non-exempt)
+        - adf_short_volume_exempt: Short volume via ADF (exempt)
+
+    Understanding Short Volume
+    ---------------------------
+    Short volume provides daily insights into short-selling activity:
+
+    1. **What is Short Volume?**
+       - Number of shares sold short on a specific trading day
+       - Reported daily from off-exchange venues and ATS
+       - Captures short sale transactions, not outstanding positions
+       - Differs from short interest (which is cumulative, bi-monthly)
+
+    2. **Short Volume Ratio Interpretation**:
+       - Formula: (short_volume / total_volume) × 100
+       - Low (< 30%): Normal or bullish sentiment
+       - Moderate (30-40%): Typical for many stocks
+       - High (40-50%): Elevated short selling
+       - Very High (> 50%): Heavy bearish pressure
+       - Extreme (> 60%): Intense bearish sentiment or hedging activity
+
+    3. **Exempt vs Non-Exempt Volume**:
+       - **Exempt Volume**: Short sales exempt from Regulation SHO
+         * Market maker hedging activities
+         * Bona fide market making
+         * Not subject to locate requirements
+       - **Non-Exempt Volume**: Regular short sales
+         * Subject to Regulation SHO
+         * Must locate shares before selling
+         * Directional bearish bets
+
+    4. **Venue Breakdown**:
+       - **NYSE**: New York Stock Exchange facilities
+       - **Nasdaq Carteret**: Nasdaq's primary facility in New Jersey
+       - **Nasdaq Chicago**: Nasdaq's Chicago-based facility
+       - **ADF**: Alternative Display Facility for off-exchange reporting
+       - Venue distribution can indicate institutional vs retail activity
+
+    Short Volume vs Short Interest
+    -------------------------------
+    Understanding the critical differences:
+
+    | Metric | Short Volume | Short Interest |
+    |--------|--------------|----------------|
+    | **Frequency** | Daily | Bi-monthly |
+    | **Measures** | Daily transactions | Outstanding positions |
+    | **Timeframe** | Single day | Cumulative snapshot |
+    | **Use Case** | Immediate sentiment | Long-term positioning |
+    | **Lag** | Real-time (T+1) | Several days delay |
+    | **Data Source** | FINRA TRF | FINRA reports |
+
+    - High short volume doesn't always mean increasing short interest
+    - Short volume includes intraday covering (buy-to-cover same day)
+    - Market makers may short for liquidity without bearish intent
+    - Use both metrics together for complete picture
+
+    Use Cases
+    ---------
+    1. **Intraday Sentiment Analysis**: Monitor daily short volume ratio to detect shifts
+       in bearish sentiment before they appear in bi-monthly short interest data.
+
+    2. **Short-Sale Trend Identification**: Track short volume patterns over time to
+       identify sustained bearish pressure or potential reversal signals.
+
+    3. **Liquidity Analysis**: Analyze venue breakdowns and total volume to assess
+       market maker activity and overall trading liquidity.
+
+    4. **Trading Strategy Optimization**: Incorporate short volume signals into entry/exit
+       timing, contrarian plays, or momentum strategies.
+
+    Examples
+    --------
+    Example 1: Get daily short volume for Tesla over past month
+        list_short_volume(
+            ticker="TSLA",
+            date_gte="2025-03-01",
+            sort="date.desc",
+            limit=30
+        )
+
+        Returns last 30 days of Tesla short volume data to identify trends.
+
+    Example 2: Find days with extreme short selling (>50% ratio)
+        list_short_volume(
+            short_volume_ratio_gt=50,
+            date_gte="2025-01-01",
+            sort="short_volume_ratio.desc",
+            limit=100
+        )
+
+        Identifies days with heavy short selling pressure across all stocks.
+
+    Example 3: Monitor multiple tech stocks for short volume trends
+        list_short_volume(
+            ticker_any_of="NVDA,AMD,INTC",
+            date_gte="2025-03-01",
+            sort="date.desc"
+        )
+
+        Tracks daily short volume for semiconductor stocks for comparative analysis.
+
+    Example 4: Analyze high-volume days with significant short activity
+        list_short_volume(
+            ticker="GME",
+            total_volume_gt=10000000,
+            short_volume_ratio_gt=40,
+            sort="date.desc"
+        )
+
+        Finds GameStop trading days with high volume and elevated short selling.
+
+    Example 5: Track short volume for specific date
+        list_short_volume(
+            ticker="AAPL",
+            date="2025-03-25"
+        )
+
+        Gets Apple's short volume breakdown for a specific trading day.
+
+    Notes
+    -----
+    - **Daily Reporting**: Short volume is reported daily (T+1) from off-exchange venues
+      and ATS. On-exchange short volume is not included in this data.
+
+    - **Not a Direct Indicator**: High short volume doesn't necessarily mean increasing
+      short interest. Market makers, day traders, and arbitrageurs may short and cover
+      within the same day, contributing to short volume without affecting short interest.
+
+    - **Market Maker Activity**: Exempt volume often represents market maker hedging.
+      High exempt volume relative to non-exempt suggests liquidity provision rather than
+      directional bearish bets.
+
+    - **Intraday Covering**: Short volume includes shorts that were covered same day.
+      A stock with 1M short volume might have had shorts open and close positions,
+      resulting in minimal net change to short interest.
+
+    - **Baseline Levels**: Many stocks maintain consistent short volume ratios:
+      * 30-40% is common for liquid large-cap stocks
+      * Market making and hedging create baseline short volume
+      * Look for deviations from stock's typical ratio
+
+    - **Interpretation Context**: Analyze short volume with additional context:
+      * Price action: Rising price + high short volume → shorts fighting rally
+      * News events: High short volume after bad news is expected
+      * Volatility: High vol days often have elevated short volume
+      * Compare to stock's historical average
+
+    - **Regulation SHO**: Exempt status relates to SEC Regulation SHO:
+      * Non-exempt shorts must locate shares before selling (locate requirement)
+      * Exempt shorts (market makers) don't need to locate
+      * Helps distinguish directional bets from market making
+
+    - **Venue Analysis**: Venue distribution provides insights:
+      * Nasdaq facilities: Often high-frequency and institutional flow
+      * NYSE: May indicate different trading patterns
+      * ADF: Alternative venue, can show off-exchange activity concentration
+      * Uneven distribution may indicate specific trading strategies
+
+    - **Time Series Analysis**: Most valuable when analyzing trends:
+      * Rising short volume ratio → increasing bearish pressure
+      * Falling ratio → decreasing bearish activity
+      * Spikes → Event-driven short selling (earnings, news)
+      * Compare to price trends for divergences
+
+    - **Contrarian Signals**: Extreme short volume can be contrarian:
+      * Very high ratio (>60%) may indicate exhaustion
+      * Unusually low ratio (<20%) after decline might signal capitulation
+      * Use with other technical indicators for confirmation
+
+    - **Combining with Short Interest**: Use together for complete picture:
+      * High short interest + high short volume → Bears adding positions
+      * High short interest + low short volume → Bears holding, not adding
+      * Low short interest + high short volume → Intraday/short-term shorts
+      * Rising short volume before SI report → Predict next SI increase
+
+    - **Off-Exchange Focus**: This data covers off-exchange and ATS venues only:
+      * Does not include on-exchange short sales
+      * Represents significant portion but not total short volume
+      * FINRA TRF (Trade Reporting Facility) data
+      * Complements exchange-reported data
+
+    - **Calculation Verification**: short_volume_ratio = (short_volume / total_volume) × 100
+      * Verify calculations when analyzing data
+      * Total_volume should be >= short_volume
+      * Ratio should be between 0 and 100
+
+    - **Historical Patterns**: Build baselines for interpretation:
+      * Calculate average ratio for each stock over time
+      * Identify typical range (e.g., 30-40% for stock X)
+      * Flag anomalies (2+ standard deviations from mean)
+      * Seasonal patterns (month-end, options expiration)
+
+    - **Screening Strategies**: Effective short volume screening:
+      * Filter by ratio thresholds (>50% for extreme days)
+      * Combine with volume filters (high volume + high ratio)
+      * Look for multi-day trends (3+ days increasing ratio)
+      * Cross-reference with price action
+      * Monitor stocks approaching short interest reporting dates
+
+    - **Data Lag**: Reported on T+1 basis:
+      * Monday's data available Tuesday
+      * Weekend gaps (no Sat/Sun data)
+      * Holidays create reporting gaps
+      * Plan analysis accounting for lag
+
+    - **Sorting Options**: Useful sorting strategies:
+      * "short_volume_ratio.desc" → Find highest short pressure days
+      * "date.desc" → Most recent data first
+      * "total_volume.desc" → Highest activity days
+      * "ticker.asc" → Alphabetical for systematic analysis
+
+    - **Pagination**: For large screening results, use limit parameter and next_url
+      from response metadata. Default limit is 10, maximum is 50000.
+
+    - **Quality Considerations**: While FINRA data is authoritative:
+      * Reporting errors can occur
+      * Venue attribution may have inconsistencies
+      * Cross-validate unusual values
+      * Use official FINRA sources for compliance purposes
     """
     try:
         results = polygon_client.list_short_volume(
@@ -858,8 +6199,33 @@ async def list_short_volume(
             date_gte=date_gte,
             limit=limit,
             sort=sort,
-            order=order,
-            params=params,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "short_volume_ratio": short_volume_ratio,
+                        "total_volume": total_volume,
+                        "ticker.any_of": ticker_any_of,
+                        "ticker.gt": ticker_gt,
+                        "ticker.gte": ticker_gte,
+                        "ticker.lt": ticker_lt,
+                        "ticker.lte": ticker_lte,
+                        "date.any_of": date_any_of,
+                        "short_volume_ratio.any_of": short_volume_ratio_any_of,
+                        "short_volume_ratio.gt": short_volume_ratio_gt,
+                        "short_volume_ratio.gte": short_volume_ratio_gte,
+                        "short_volume_ratio.lt": short_volume_ratio_lt,
+                        "short_volume_ratio.lte": short_volume_ratio_lte,
+                        "total_volume.any_of": total_volume_any_of,
+                        "total_volume.gt": total_volume_gt,
+                        "total_volume.gte": total_volume_gte,
+                        "total_volume.lt": total_volume_lt,
+                        "total_volume.lte": total_volume_lte,
+                    }.items()
+                    if v is not None
+                },
+            },
             raw=True,
         )
 
@@ -882,7 +6248,47 @@ async def list_treasury_yields(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Retrieve treasury yield data.
+    Retrieve historical U.S. Treasury yield data for standard maturities from 1-month to 30-years.
+    Returns daily yield curves with historical records dating back to 1962, showing how interest rates change over time.
+
+    Reference: https://polygon.io/docs/rest/economy/treasury-yields
+
+    Treasury yields represent market interest rates for U.S. government debt at various maturities.
+    The yield curve (plotting short-term to long-term rates) is a key economic indicator used to
+    assess recession risk, inflation expectations, and Federal Reserve policy effectiveness.
+
+    Parameters:
+    - date: Filter by exact calendar date (YYYY-MM-DD)
+    - date_any_of: Filter equal to any comma-separated dates
+    - date_lt: Filter for dates less than this date
+    - date_lte: Filter for dates less than or equal to this date
+    - date_gt: Filter for dates greater than this date
+    - date_gte: Filter for dates greater than or equal to this date
+    - limit: Number of results to return (default: 10, max: 50000)
+    - sort: Sort field (default: "date")
+    - order: Sort order ("asc" or "desc")
+    - params: Additional filtering parameters
+
+    Available yield maturities in response:
+    - Short-term: yield_1_month, yield_3_month, yield_6_month
+    - Mid-term: yield_1_year, yield_2_year, yield_3_year, yield_5_year, yield_7_year
+    - Long-term: yield_10_year, yield_20_year, yield_30_year
+
+    Example: list_treasury_yields(date_gte="2025-01-01", limit=100)
+             gets 100 days of yield data since January 2025
+    Example: list_treasury_yields(date="2025-03-15")
+             gets yield curve snapshot for a specific date
+    Example: list_treasury_yields(date_gte="2020-01-01", date_lte="2020-12-31", limit=1000)
+             gets entire 2020 yield curve history
+    Example: list_treasury_yields(date_gte="2024-01-01", sort="date", order="desc")
+             gets recent yields in reverse chronological order
+
+    Note: Yield curve analysis is critical for economic forecasting:
+    - Normal curve (long-term > short-term): Healthy economy expected
+    - Inverted curve (short-term > long-term): Recession warning signal
+    - Flat curve: Economic uncertainty or transition period
+    The 10-year minus 2-year spread is widely watched as a recession predictor.
+    Historical data back to 1962 enables long-term trend analysis and comparison to past economic cycles.
     """
     try:
         results = polygon_client.list_treasury_yields(
@@ -916,7 +6322,49 @@ async def list_inflation(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get inflation data from the Federal Reserve.
+    Retrieve key U.S. inflation indicators including CPI and PCE indexes with historical data.
+    Returns both headline and core inflation measures, tracking actual changes in consumer prices and spending behavior.
+
+    Reference: https://polygon.io/docs/rest/economy/inflation
+
+    Provides comprehensive inflation data essential for monetary policy analysis, purchasing power evaluation,
+    and economic forecasting. Includes the Federal Reserve's preferred inflation measure (Core PCE).
+
+    Parameters:
+    - date: Filter by exact calendar date (YYYY-MM-DD)
+    - date_any_of: Filter equal to any comma-separated dates
+    - date_gt: Filter for dates greater than this date
+    - date_gte: Filter for dates greater than or equal to this date
+    - date_lt: Filter for dates less than this date
+    - date_lte: Filter for dates less than or equal to this date
+    - limit: Number of results to return (default: 10, max: 50000)
+    - sort: Sort field (default: "date")
+    - params: Additional filtering parameters
+
+    Available inflation metrics in response:
+    - CPI: Consumer Price Index (headline inflation - all urban consumers, fixed basket)
+    - CPI Core: CPI excluding food and energy (underlying inflation trends)
+    - CPI Year-over-Year: % change in CPI (most commonly cited inflation rate)
+    - PCE: Personal Consumption Expenditures Price Index (broader measure, Fed uses this)
+    - PCE Core: PCE excluding food and energy (Fed's PREFERRED inflation measure)
+    - PCE Spending: Nominal consumer spending in billions (not inflation-adjusted)
+
+    Example: list_inflation(date_gte="2024-01-01", limit=12)
+             gets monthly inflation data for 2024
+    Example: list_inflation(date="2025-06-01")
+             gets inflation snapshot for a specific month
+    Example: list_inflation(date_gte="2020-01-01", date_lte="2023-12-31", limit=1000)
+             gets full inflation history for 2020-2023 period
+    Example: list_inflation(date_gte="2022-01-01", sort="date", order="desc")
+             gets recent inflation data in reverse chronological order
+
+    Note: Understanding inflation measures:
+    - CPI (Consumer Price Index): Fixed basket of goods/services, widely cited in media
+    - PCE (Personal Consumption Expenditures): Captures changing spending patterns, Fed's preferred measure
+    - Core inflation (excludes food/energy): Shows underlying trends without volatile components
+    - Fed targets 2% PCE Core inflation for price stability
+    - CPI typically runs ~0.3-0.5% higher than PCE due to methodology differences
+    Year-over-year CPI is the most commonly referenced in public discourse and policy decisions.
     """
     try:
         results = polygon_client.list_inflation(
@@ -938,6 +6386,659 @@ async def list_inflation(
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_inflation_expectations(
+    date: Optional[Union[str, datetime, date]] = None,
+    date_any_of: Optional[str] = None,
+    date_gt: Optional[Union[str, datetime, date]] = None,
+    date_gte: Optional[Union[str, datetime, date]] = None,
+    date_lt: Optional[Union[str, datetime, date]] = None,
+    date_lte: Optional[Union[str, datetime, date]] = None,
+    limit: Optional[int] = 100,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve U.S. inflation expectations from financial markets and economic models across multiple time horizons.
+    Returns both market-based (TIPS breakeven) and model-based (Cleveland Fed) inflation outlook data.
+
+    Reference: https://polygon.io/docs/rest/economy/inflation-expectations
+
+    Inflation expectations are critical for understanding how investors and forecasters perceive future inflation risk.
+    Unlike realized inflation (list_inflation), these forward-looking measures help predict Fed policy changes and
+    assess market sentiment about price stability.
+
+    Parameters:
+    - date: Filter by exact calendar date (YYYY-MM-DD)
+    - date_any_of: Filter equal to any comma-separated dates
+    - date_gt: Filter for dates greater than this date
+    - date_gte: Filter for dates greater than or equal to this date
+    - date_lt: Filter for dates less than this date
+    - date_lte: Filter for dates less than or equal to this date
+    - limit: Number of results to return (default: 100, max: 50000)
+    - sort: Sort field (default: "date")
+    - params: Additional filtering parameters
+
+    Available inflation expectation metrics in response:
+
+    Market-based (TIPS Breakeven Rates):
+    - market_5_year: 5-year breakeven inflation rate (5Y nominal yield - 5Y TIPS yield)
+    - market_10_year: 10-year breakeven inflation rate (10Y nominal yield - 10Y TIPS yield)
+    - forward_years_5_to_10: 5-year forward 5-year rate (inflation expected in years 5-10)
+
+    Model-based (Cleveland Fed Estimates):
+    - model_1_year: Cleveland Fed 1-year inflation expectation
+    - model_5_year: Cleveland Fed 5-year inflation expectation
+    - model_10_year: Cleveland Fed 10-year inflation expectation
+    - model_30_year: Cleveland Fed 30-year inflation expectation
+
+    Example: list_inflation_expectations(date_gte="2024-01-01", limit=250)
+             gets inflation expectations since 2024
+    Example: list_inflation_expectations(date="2025-06-17")
+             gets inflation expectations snapshot for a specific date
+    Example: list_inflation_expectations(date_gte="2020-01-01", date_lte="2023-12-31", limit=1000)
+             gets full inflation expectations history for 2020-2023
+    Example: list_inflation_expectations(date_gte="2023-01-01", sort="date", order="desc")
+             gets recent inflation expectations in reverse order
+
+    Note: Understanding inflation expectations:
+    - Market breakeven rates: Derived from TIPS (Treasury Inflation-Protected Securities) spreads
+    - Cleveland Fed model: Combines Treasury yields, inflation data, swaps, and surveys
+    - 5Y5Y forward rate: Key Fed-watched indicator of long-term inflation anchoring
+    - Well-anchored expectations (near 2%): Sign of Fed credibility
+    - Rising expectations: May signal need for tighter monetary policy
+    - Divergence between market and model: Can indicate risk premium or liquidity issues
+
+    Use case: Compare market_10_year vs model_10_year to assess inflation risk premium.
+    If market_10_year > model_10_year, investors demand extra compensation for inflation uncertainty.
+    """
+    try:
+        # Build the params dictionary
+        request_params = params or {}
+        if date:
+            request_params["date"] = date
+        if date_any_of:
+            request_params["date.any_of"] = date_any_of
+        if date_gt:
+            request_params["date.gt"] = date_gt
+        if date_gte:
+            request_params["date.gte"] = date_gte
+        if date_lt:
+            request_params["date.lt"] = date_lt
+        if date_lte:
+            request_params["date.lte"] = date_lte
+        if limit:
+            request_params["limit"] = limit
+        if sort:
+            request_params["sort"] = sort
+
+        # Make the request to the inflation expectations endpoint
+        results = polygon_client._get(
+            "/fed/v1/inflation-expectations", params=request_params
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_options_contracts(
+    underlying_ticker: Optional[str] = None,
+    contract_type: Optional[str] = None,
+    expiration_date: Optional[Union[str, datetime, date]] = None,
+    as_of: Optional[Union[str, datetime, date]] = None,
+    strike_price: Optional[float] = None,
+    expired: Optional[bool] = False,
+    limit: Optional[int] = 10,
+    sort: Optional[str] = None,
+    order: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Retrieve a comprehensive index of options contracts, including both active and expired listings.
+    Returns contract details including type (call/put), exercise style, expiration date, and strike price.
+
+    Reference: https://polygon.io/docs/options/get_v3_reference_options_contracts
+
+    Options contracts give the right (but not obligation) to buy (call) or sell (put) an underlying stock
+    at a specified strike price before the expiration date. Use this endpoint to explore available contracts,
+    analyze market characteristics, and develop trading strategies.
+
+    Parameters:
+    - underlying_ticker: Filter by underlying stock ticker (e.g., "AAPL", "TSLA")
+    - contract_type: Filter by contract type ("call", "put")
+    - expiration_date: Filter by exact expiration date (YYYY-MM-DD)
+    - as_of: Specify point in time for contract listings (YYYY-MM-DD, defaults to today)
+    - strike_price: Filter by exact strike price
+    - expired: Include expired contracts (default: False, only active contracts)
+    - limit: Number of results to return (default: 10, max: 1000)
+    - sort: Sort field (e.g., "expiration_date", "strike_price")
+    - order: Sort order ("asc" or "desc")
+    - params: Additional filtering parameters.
+      Use comparison operators like .gte, .gt, .lte, .lt with fields like:
+      - underlying_ticker: Range filtering by ticker
+      - expiration_date: Range filtering by expiration (e.g., expiration_date.gte)
+      - strike_price: Range filtering by strike (e.g., strike_price.gte)
+
+    Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", limit=50)
+             gets 50 AAPL call options contracts
+    Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01", "expiration_date.lte": "2025-12-31"})
+             gets TSLA options expiring in second half of 2025
+    Example: list_options_contracts(underlying_ticker="NVDA", contract_type="put", params={"strike_price.gte": 500, "strike_price.lte": 600})
+             gets NVDA put options with strikes between $500-$600
+    Example: list_options_contracts(underlying_ticker="SPY", expiration_date="2025-12-19", limit=100)
+             gets all SPY options expiring on December 19, 2025
+
+    Note: Understanding options contract details:
+    - Ticker format: O:AAPL251219C00150000 = Options:Apple/Dec 19 2025/Call/$150 strike
+    - Exercise style: American (can exercise anytime), European (only at expiration)
+    - Shares per contract: Typically 100 shares per contract
+    - Additional underlyings: Some contracts may have adjusted deliverables due to corporate actions
+      (stock splits, mergers, spinoffs) - check additional_underlyings field
+    - CFI code: ISO 10962 standard identifier for contract classification
+
+    Use case: Options chain analysis - retrieve all contracts for a ticker to analyze
+    strike distribution, identify liquid strikes, and spot unusual activity.
+    """
+    try:
+        # Build the params dictionary
+        request_params = params or {}
+        if underlying_ticker:
+            request_params["underlying_ticker"] = underlying_ticker
+        if contract_type:
+            request_params["contract_type"] = contract_type
+        if expiration_date:
+            request_params["expiration_date"] = expiration_date
+        if as_of:
+            request_params["as_of"] = as_of
+        if strike_price is not None:
+            request_params["strike_price"] = strike_price
+        if expired is not None:
+            request_params["expired"] = expired
+        if limit:
+            request_params["limit"] = limit
+        if sort:
+            request_params["sort"] = sort
+        if order:
+            request_params["order"] = order
+
+        # Make the request to the options contracts endpoint
+        results = polygon_client._get(
+            "/v3/reference/options/contracts", params=request_params
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_contract(
+    options_ticker: str,
+    as_of: Optional[Union[str, datetime, date]] = None,
+) -> str:
+    """
+    Retrieve detailed information about a specific options contract by its ticker symbol.
+    Returns contract specifications including type, strike, expiration, exercise style, and underlying details.
+
+    Reference: https://polygon.io/docs/options/get_v3_reference_options_contracts__options_ticker
+
+    Use this endpoint to get complete specifications for a known options contract. Essential for validating
+    contract details, understanding deliverables, and integrating contracts into trading strategies.
+
+    Parameters:
+    - options_ticker: Options contract ticker (required)
+      Format: O:SYMBOL[YY][MM][DD][C/P][STRIKE]
+      Example: "O:AAPL251219C00150000" = Apple Dec 19 2025 Call $150 strike
+    - as_of: Specify point in time for contract details (YYYY-MM-DD, defaults to today)
+      Useful for retrieving historical contract specifications
+
+    Options ticker format breakdown:
+    - O: = Options prefix
+    - AAPL = Underlying ticker symbol
+    - 251219 = Expiration date (Dec 19, 2025 in YYMMDD format)
+    - C = Contract type (C=Call, P=Put)
+    - 00150000 = Strike price ($150.00 with 3 decimal precision)
+
+    Example: get_options_contract(options_ticker="O:AAPL251219C00150000")
+             gets details for Apple $150 call expiring Dec 19, 2025
+    Example: get_options_contract(options_ticker="O:TSLA250620P00700000")
+             gets details for Tesla $700 put expiring June 20, 2025
+    Example: get_options_contract(options_ticker="O:SPY251219C00500000", as_of="2024-01-01")
+             gets historical contract details as of January 1, 2024
+    Example: get_options_contract(options_ticker="O:NVDA250117C01000000")
+             gets details for NVIDIA $1000 call expiring Jan 17, 2025
+
+    Response includes:
+    - contract_type: "call", "put", or "other"
+    - strike_price: Exercise price of the option
+    - expiration_date: Contract expiration date (YYYY-MM-DD)
+    - exercise_style: "american", "european", or "bermudan"
+      - American: Can exercise anytime before expiration (most U.S. stock options)
+      - European: Can only exercise at expiration
+      - Bermudan: Can exercise on specific dates
+    - shares_per_contract: Number of shares controlled (typically 100)
+    - underlying_ticker: Stock symbol the option is based on
+    - primary_exchange: MIC code of listing exchange
+    - additional_underlyings: Adjusted deliverables from corporate actions
+      - May include cash, additional stock from mergers/spinoffs
+      - Example: Stock split might result in non-standard deliverables
+    - cfi: ISO 10962 CFI code for contract classification
+
+    Note: Additional underlyings appear when corporate actions modify standard deliverables.
+    Examples include mergers, acquisitions, spinoffs, special dividends, and stock splits.
+    Always check this field before trading to understand exact deliverables.
+
+    Use case: Before executing an options trade, verify contract specifications to ensure
+    the strike price, expiration date, and deliverables match your strategy requirements.
+    """
+    try:
+        # Build the params dictionary
+        request_params = {}
+        if as_of:
+            request_params["as_of"] = as_of
+
+        # Make the request to the specific options contract endpoint
+        results = polygon_client._get(
+            f"/v3/reference/options/contracts/{options_ticker}", params=request_params
+        )
+
+        return json_to_csv(results)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_aggs(
+    options_ticker: str,
+    multiplier: int,
+    timespan: str,
+    from_: Union[str, int, datetime, date],
+    to: Union[str, int, datetime, date],
+    adjusted: Optional[bool] = True,
+    sort: Optional[str] = None,
+    limit: Optional[int] = 5000,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get aggregate OHLC bars for an options contract over a custom date range and time interval.
+    Returns open, high, low, close, volume, and VWAP data for the specified time periods in Eastern Time (ET).
+
+    Reference: https://polygon.io/docs/options/get_v2_aggs_ticker__optionsticker__range__multiplier___timespan___from___to
+
+    Aggregates are derived from qualifying trades only. Empty intervals indicate no trading activity.
+    Perfect for technical analysis, backtesting, and visualization of options price movements.
+
+    Parameters:
+    - options_ticker: Options contract ticker (e.g., "O:AAPL251219C00150000")
+    - multiplier: Size of the timespan multiplier (e.g., 1 for 1 day, 5 for 5 minutes)
+    - timespan: Size of the time window (minute, hour, day, week, month, quarter, year)
+    - from_: Start date (YYYY-MM-DD) or timestamp in milliseconds
+    - to: End date (YYYY-MM-DD) or timestamp in milliseconds
+    - adjusted: Whether results are adjusted for splits (default: True)
+    - sort: Sort order - "asc" (oldest first) or "desc" (newest first)
+    - limit: Max base aggregates to query (default: 5000, max: 50000)
+    - params: Additional query parameters
+
+    Example: get_options_aggs(options_ticker="O:AAPL251219C00150000", multiplier=1, timespan="day", from_="2025-01-01", to="2025-03-31")
+             gets daily OHLC data for Apple $150 call from Jan-Mar 2025
+    Example: get_options_aggs(options_ticker="O:SPY251219C00500000", multiplier=5, timespan="minute", from_="2025-03-20", to="2025-03-20")
+             gets 5-minute intraday bars for SPY $500 call on March 20, 2025
+    Example: get_options_aggs(options_ticker="O:TSLA250620P00700000", multiplier=1, timespan="hour", from_="2025-06-01", to="2025-06-30")
+             gets hourly bars for Tesla $700 put during June 2025
+    Example: get_options_aggs(options_ticker="O:NVDA250117C01000000", multiplier=1, timespan="week", from_="2024-01-01", to="2024-12-31", limit=10000)
+             gets weekly bars for NVIDIA $1000 call for all of 2024
+
+    Response fields:
+    - c: Close price (last trade price in the period)
+    - h: High price (highest trade price in the period)
+    - l: Low price (lowest trade price in the period)
+    - o: Open price (first trade price in the period)
+    - t: Timestamp (Unix milliseconds for the start of the aggregate window)
+    - v: Volume (number of contracts traded)
+    - vw: VWAP (Volume Weighted Average Price)
+    - n: Number of trades (transactions count)
+
+    Note: Options aggregate data considerations:
+    - Times are in Eastern Time (ET), not UTC
+    - Empty bars indicate no qualifying trades occurred in that period
+    - Options can be less liquid than stocks - expect more gaps in data
+    - Adjusted vs unadjusted: Most options don't need split adjustments, but use adjusted=True
+      for contracts that may have been affected by underlying stock corporate actions
+    - Intraday bars (minute/hour) capture detailed price movement for active contracts
+    - Daily/weekly bars better for longer-term analysis and less liquid contracts
+
+    Use case: Analyze options contract price behavior around earnings announcements by
+    pulling hourly bars for the week surrounding the event date.
+    """
+    try:
+        results = polygon_client.get_aggs(
+            ticker=options_ticker,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=from_,
+            to=to,
+            adjusted=adjusted,
+            sort=sort,
+            limit=limit,
+            params=params,
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_daily_open_close(
+    options_ticker: str,
+    date: Union[str, datetime, date],
+    adjusted: Optional[bool] = True,
+) -> str:
+    """
+    Get the daily open, close, high, low, and volume for a specific options contract on a given date.
+    Includes pre-market and after-hours pricing when available.
+
+    Reference: https://polygon.io/docs/options/get_v1_open-close__optionsticker___date
+
+    Essential for daily performance analysis, historical data collection, and understanding
+    trading activity outside regular market hours.
+
+    Parameters:
+    - options_ticker: Options contract ticker (e.g., "O:AAPL251219C00150000")
+    - date: The date for the requested open/close data (YYYY-MM-DD)
+    - adjusted: Whether results are adjusted for splits (default: True)
+
+    Example: get_options_daily_open_close(options_ticker="O:AAPL251219C00150000", date="2025-03-20")
+             gets daily OHLC for Apple $150 call on March 20, 2025
+    Example: get_options_daily_open_close(options_ticker="O:TSLA250620P00700000", date="2025-06-15")
+             gets daily OHLC for Tesla $700 put on June 15, 2025
+    Example: get_options_daily_open_close(options_ticker="O:SPY251219C00500000", date="2025-01-15", adjusted=False)
+             gets unadjusted daily OHLC for SPY $500 call
+    Example: get_options_daily_open_close(options_ticker="O:NVDA250117C01000000", date="2025-01-10")
+             gets daily OHLC for NVIDIA $1000 call
+
+    Response includes:
+    - open: Opening price for the day
+    - high: Highest price during the day
+    - low: Lowest price during the day
+    - close: Closing price for the day
+    - volume: Total contracts traded
+    - preMarket: Open price during pre-market trading (if available)
+    - afterHours: Close price during after-hours trading (if available)
+    - from: The requested date
+    - symbol: Options ticker
+    - otc: Whether this is an OTC ticker (field omitted if false)
+
+    Note: Daily open/close data considerations:
+    - Single snapshot of the entire trading day's activity
+    - Pre-market and after-hours data provide extended trading insights
+    - Volume shows total contract activity for the day
+    - Useful for quickly checking daily performance without full aggregate data
+    - Less granular than get_options_aggs but faster for single-day lookups
+    - Perfect for building daily history or tracking specific dates
+
+    Use case: After an earnings announcement, check the daily open/close to see how
+    options contracts responded - compare regular hours vs after-hours pricing to
+    gauge market reaction timing.
+    """
+    try:
+        results = polygon_client.get_daily_open_close_agg(
+            ticker=options_ticker,
+            date=date,
+            adjusted=adjusted,
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_previous_close(
+    options_ticker: str,
+    adjusted: Optional[bool] = True,
+) -> str:
+    """
+    Get the previous trading day's OHLC (open, high, low, close) data for a specified options contract.
+    Provides key pricing metrics and volume to assess recent performance and inform trading strategies.
+
+    Reference: https://polygon.io/docs/options/get_v2_aggs_ticker__optionsticker__prev
+
+    Essential for baseline comparisons, technical analysis, market research, and daily reporting.
+    Use this for quick lookups of the most recent completed trading day.
+
+    Parameters:
+    - options_ticker: Options contract ticker (e.g., "O:TSLA210903C00700000")
+    - adjusted: Whether results are adjusted for splits (default: True)
+
+    Example: get_options_previous_close(options_ticker="O:TSLA210903C00700000")
+             gets previous day OHLC for Tesla call option
+    Example: get_options_previous_close(options_ticker="O:AAPL251219C00150000")
+             gets previous day OHLC for Apple $150 call
+    Example: get_options_previous_close(options_ticker="O:SPY251219P00450000", adjusted=False)
+             gets unadjusted previous day OHLC for SPY $450 put
+    Example: get_options_previous_close(options_ticker="O:NVDA250117C01000000")
+             gets previous day OHLC for NVIDIA $1000 call
+
+    Response includes:
+    - T: Ticker symbol
+    - o: Opening price
+    - h: Highest price
+    - l: Lowest price
+    - c: Closing price
+    - v: Total volume (contracts traded)
+    - vw: Volume weighted average price
+    - n: Number of transactions
+    - t: Timestamp for the aggregate window
+
+    Note: Previous day considerations:
+    - Returns data for the most recent completed trading day
+    - Faster than querying aggregates with specific date ranges
+    - Perfect for quick baseline comparisons and daily reports
+    - Volume shows total contract activity for that trading day
+    - Use for technical analysis requiring yesterday's OHLC
+    - Ideal for calculating daily changes and percentage moves
+
+    Use case: Before the market opens, check previous day's close for key options contracts
+    to establish baseline levels and identify overnight gaps when today's trading begins.
+    """
+    try:
+        results = polygon_client.get_previous_close_agg(
+            ticker=options_ticker,
+            adjusted=adjusted,
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_snapshot(
+    underlying_asset: str,
+    option_contract: str,
+) -> str:
+    """
+    Get a comprehensive snapshot of an options contract with market data, greeks, and underlying asset info.
+    Consolidates vital metrics including break-even price, implied volatility, open interest, greeks,
+    latest quote/trade, and underlying asset price into a single response.
+
+    Reference: https://polygon.io/docs/options/get_v3_snapshot_options__underlyingasset___optioncontract
+
+    Essential for trade evaluation, market analysis, risk assessment, and strategy refinement.
+    Provides a complete view of an options contract's current state and value.
+
+    Parameters:
+    - underlying_asset: Underlying ticker symbol (e.g., "AAPL", "TSLA", "SPY")
+    - option_contract: Option contract identifier (e.g., "O:AAPL230616C00150000")
+
+    Example: get_options_snapshot(underlying_asset="AAPL", option_contract="O:AAPL230616C00150000")
+             gets full snapshot for Apple $150 call expiring June 16, 2023
+    Example: get_options_snapshot(underlying_asset="TSLA", option_contract="O:TSLA210903C00700000")
+             gets snapshot for Tesla $700 call with greeks and IV
+    Example: get_options_snapshot(underlying_asset="SPY", option_contract="O:SPY251219P00450000")
+             gets snapshot for SPY $450 put with break-even analysis
+    Example: get_options_snapshot(underlying_asset="NVDA", option_contract="O:NVDA250117C01000000")
+             gets snapshot for NVIDIA $1000 call with underlying asset price
+
+    Response includes:
+    - break_even_price: Price for contract to break even (strike + premium for calls, strike - premium for puts)
+    - day: Most recent daily bar (open, high, low, close, volume, vwap, change, change_percent)
+    - details: Contract specifications (type, style, expiration, strike, shares per contract)
+    - greeks: Delta, gamma, theta, vega (if available, may be missing for deep ITM/OTM)
+    - implied_volatility: Market's forecast for underlying volatility
+    - last_quote: Most recent bid/ask with sizes and exchanges (if plan includes quotes)
+    - last_trade: Most recent trade with price, size, conditions (if plan includes trades)
+    - open_interest: Contracts held at end of last trading day
+    - underlying_asset: Current underlying stock price and change to break-even
+    - fmv: Fair Market Value (Business plans only)
+
+    Note: Snapshot data considerations:
+    - Real-time or near-real-time data depending on your plan
+    - Greeks may not be available for deep in-the-money or out-of-the-money options
+    - Break-even calculation includes premium paid
+    - Implied volatility reflects current market pricing expectations
+    - Quote and trade data availability depends on subscription tier
+    - Underlying asset data shows how far stock needs to move to reach break-even
+    - Perfect for quick contract evaluation before entering trades
+
+    Use case: Before buying a call option, check the snapshot to see current implied volatility,
+    greeks (especially delta for directional exposure), and break-even price relative to current
+    underlying price to assess risk/reward and probability of profit.
+    """
+    try:
+        results = polygon_client.get_snapshot_option(
+            underlying_asset=underlying_asset,
+            option_contract=option_contract,
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_options_chain_snapshot(
+    underlying_asset: str,
+    strike_price: Optional[float] = None,
+    expiration_date: Optional[Union[str, date]] = None,
+    contract_type: Optional[str] = None,
+    strike_price_gte: Optional[float] = None,
+    strike_price_gt: Optional[float] = None,
+    strike_price_lte: Optional[float] = None,
+    strike_price_lt: Optional[float] = None,
+    expiration_date_gte: Optional[Union[str, date]] = None,
+    expiration_date_gt: Optional[Union[str, date]] = None,
+    expiration_date_lte: Optional[Union[str, date]] = None,
+    expiration_date_lt: Optional[Union[str, date]] = None,
+    order: Optional[str] = None,
+    limit: Optional[int] = 10,
+    sort: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get comprehensive snapshots of all options contracts for a specified underlying asset.
+    Returns the full options chain with pricing, greeks, implied volatility, quotes, trades,
+    and open interest for each contract. Filter by strike price, expiration, and contract type.
+
+    Reference: https://polygon.io/docs/options/get_v3_snapshot_options__underlyingasset
+
+    Essential for market overview, strategy comparison, research/modeling, and portfolio refinement.
+    Examine the entire options chain in a single request to evaluate market conditions and compare contracts.
+
+    Parameters:
+    - underlying_asset: Underlying ticker symbol (e.g., "AAPL", "TSLA", "SPY")
+    - strike_price: Filter by exact strike price
+    - expiration_date: Filter by expiration date (YYYY-MM-DD)
+    - contract_type: Filter by contract type ("call" or "put")
+    - strike_price_gte: Strike price greater than or equal to
+    - strike_price_gt: Strike price greater than
+    - strike_price_lte: Strike price less than or equal to
+    - strike_price_lt: Strike price less than
+    - expiration_date_gte: Expiration date greater than or equal to
+    - expiration_date_gt: Expiration date greater than
+    - expiration_date_lte: Expiration date less than or equal to
+    - expiration_date_lt: Expiration date less than
+    - order: Order results based on sort field ("asc" or "desc")
+    - limit: Number of results to return (default: 10, max: 250)
+    - sort: Field to sort by (e.g., "strike_price", "expiration_date")
+    - params: Additional query parameters
+
+    Example: get_options_chain_snapshot(underlying_asset="AAPL", contract_type="call", limit=50)
+             gets all call options for Apple (up to 50 contracts)
+    Example: get_options_chain_snapshot(underlying_asset="TSLA", expiration_date="2025-06-20", limit=100)
+             gets all options expiring on June 20, 2025 for Tesla
+    Example: get_options_chain_snapshot(underlying_asset="SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put")
+             gets SPY put options with strikes between $450-$500
+    Example: get_options_chain_snapshot(underlying_asset="NVDA", expiration_date_gte="2025-01-17", expiration_date_lte="2025-03-21", sort="strike_price", order="asc")
+             gets NVIDIA options expiring between Jan-Mar 2025, sorted by strike
+
+    Response includes (for each contract):
+    - break_even_price: Price for contract to break even
+    - day: Most recent daily bar (OHLC, volume, change)
+    - details: Contract specifications (type, style, expiration, strike)
+    - greeks: Delta, gamma, theta, vega (when available)
+    - implied_volatility: Market's volatility forecast
+    - last_quote: Most recent bid/ask with sizes
+    - last_trade: Most recent trade details
+    - open_interest: Contracts held at end of last trading day
+    - underlying_asset: Current stock price and change to break-even
+    - fmv: Fair Market Value (Business plans only)
+
+    Note: Options chain considerations:
+    - Returns multiple contracts in a single request (up to 250)
+    - Filter to find specific strategies (e.g., ATM calls, vertical spreads)
+    - Compare implied volatility across strikes to identify skew
+    - Analyze open interest to gauge market positioning
+    - Use strike price ranges to focus on tradable strikes
+    - Expiration date filters help analyze specific time horizons
+    - Greeks show how contracts respond to market changes
+    - Perfect for constructing multi-leg strategies
+
+    Use case: Planning a bull call spread on AAPL - filter for calls expiring in 30-60 days
+    with strikes around current price, compare implied volatility and delta across strikes
+    to select optimal long and short legs for the spread.
+    """
+    try:
+        results = polygon_client.get_snapshot_option_chain(
+            underlying_asset=underlying_asset,
+            params={
+                **(params or {}),
+                **{
+                    k: v
+                    for k, v in {
+                        "strike_price": strike_price,
+                        "expiration_date": expiration_date,
+                        "contract_type": contract_type,
+                        "strike_price.gte": strike_price_gte,
+                        "strike_price.gt": strike_price_gt,
+                        "strike_price.lte": strike_price_lte,
+                        "strike_price.lt": strike_price_lt,
+                        "expiration_date.gte": expiration_date_gte,
+                        "expiration_date.gt": expiration_date_gt,
+                        "expiration_date.lte": expiration_date_lte,
+                        "expiration_date.lt": expiration_date_lt,
+                        "order": order,
+                        "limit": limit,
+                        "sort": sort,
+                    }.items()
+                    if v is not None
+                },
+            },
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_analyst_insights(
     date: Optional[Union[str, date]] = None,
     date_any_of: Optional[str] = None,
@@ -1043,7 +7144,7 @@ async def list_benzinga_analyst_insights(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_analysts(
     benzinga_id: Optional[str] = None,
     benzinga_id_any_of: Optional[str] = None,
@@ -1113,7 +7214,7 @@ async def list_benzinga_analysts(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_consensus_ratings(
     ticker: str,
     date: Optional[Union[str, date]] = None,
@@ -1145,7 +7246,7 @@ async def list_benzinga_consensus_ratings(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_earnings(
     date: Optional[Union[str, date]] = None,
     date_any_of: Optional[str] = None,
@@ -1275,7 +7376,7 @@ async def list_benzinga_earnings(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_firms(
     benzinga_id: Optional[str] = None,
     benzinga_id_any_of: Optional[str] = None,
@@ -1309,7 +7410,7 @@ async def list_benzinga_firms(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_guidance(
     date: Optional[Union[str, date]] = None,
     date_any_of: Optional[str] = None,
@@ -1415,7 +7516,7 @@ async def list_benzinga_guidance(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_news(
     published: Optional[str] = None,
     published_any_of: Optional[str] = None,
@@ -1491,7 +7592,7 @@ async def list_benzinga_news(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_benzinga_ratings(
     date: Optional[Union[str, date]] = None,
     date_any_of: Optional[str] = None,
@@ -1777,7 +7878,7 @@ async def get_futures_product_details(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_futures_quotes(
     ticker: str,
     timestamp: Optional[str] = None,
@@ -1821,7 +7922,7 @@ async def list_futures_quotes(
         return f"Error: {e}"
 
 
-@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+# @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 async def list_futures_trades(
     ticker: str,
     timestamp: Optional[str] = None,
