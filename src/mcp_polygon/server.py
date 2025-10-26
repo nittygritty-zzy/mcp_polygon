@@ -6633,17 +6633,19 @@ async def get_options_contract(
     the strike price, expiration date, and deliverables match your strategy requirements.
     """
     try:
-        # Build the params dictionary
-        request_params = {}
-        if as_of:
-            request_params["as_of"] = as_of
-
-        # Make the request to the specific options contract endpoint
-        results = polygon_client._get(
-            f"/v3/reference/options/contracts/{options_ticker}", params=request_params
+        results = polygon_client.get_options_contract(
+            ticker=options_ticker, as_of=as_of, raw=True
         )
 
-        return json_to_csv(results)
+        # Parse the response and extract the results object
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data:
+            # Wrap the results object in an array for CSV formatting
+            formatted_data = {"results": [data["results"]]}
+            return json_to_csv(formatted_data)
+        return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
 
@@ -6917,6 +6919,14 @@ async def get_options_snapshot(
             raw=True,
         )
 
+        # Parse the response and extract the results object
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data:
+            # Wrap the results object in an array for CSV formatting
+            formatted_data = {"results": [data["results"]]}
+            return json_to_csv(formatted_data)
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
