@@ -1774,6 +1774,14 @@ async def get_ticker_details(
             ticker=ticker, date=date, params=params, raw=True
         )
 
+        # Parse the response and extract the results object
+        import json
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data:
+            # Wrap the results object in an array for CSV formatting
+            formatted_data = {"results": [data["results"]]}
+            return json_to_csv(formatted_data)
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
