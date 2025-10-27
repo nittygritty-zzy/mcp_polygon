@@ -65,6 +65,10 @@ def _flatten_dict(
     Returns:
         Flattened dictionary with no nested structures
     """
+    # Handle non-dict input gracefully
+    if not isinstance(d, dict):
+        return {"value": str(d)}
+
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k

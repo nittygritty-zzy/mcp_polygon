@@ -884,9 +884,19 @@ async def get_snapshot_option(
             raw=True,
         )
 
+        # Parse the response and extract the results object
+        import json
+        import traceback
+
+        data = json.loads(results.data.decode("utf-8"))
+        if "results" in data:
+            # Wrap the results object in an array for CSV formatting
+            formatted_data = {"results": [data["results"]]}
+            return json_to_csv(formatted_data)
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
-        return f"Error: {e}"
+        import traceback
+        return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
