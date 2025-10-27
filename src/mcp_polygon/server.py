@@ -1,10 +1,11 @@
 import os
+import json
 from typing import Optional, Any, Dict, Union, List, Literal
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from polygon import RESTClient
 from importlib.metadata import version, PackageNotFoundError
-from .formatters import json_to_csv
+from .formatters import json_to_csv, calculate_gex, enrich_options_with_gex_and_advanced_greeks
 
 from datetime import datetime, date
 
@@ -7051,7 +7052,41 @@ async def get_options_chain_snapshot(
             raw=True,
         )
 
-        return json_to_csv(results.data.decode("utf-8"))
+        # Parse the JSON response to calculate GEX
+        data = json.loads(results.data.decode("utf-8"))
+
+        # Extract options data
+        options_list = data.get("results", [])
+
+        # Get current stock price by fetching the underlying ticker snapshot
+        stock_price = None
+        try:
+            snapshot_result = polygon_client.get_snapshot_ticker(
+                market_type="stocks",
+                ticker=underlying_asset,
+                raw=True,
+            )
+            snapshot_data = json.loads(snapshot_result.data.decode("utf-8"))
+            if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
+                stock_price = snapshot_data["ticker"]["day"].get("c")  # Closing price
+            # Fallback: try prevDay close if day close not available
+            if not stock_price and "ticker" in snapshot_data and "prevDay" in snapshot_data["ticker"]:
+                stock_price = snapshot_data["ticker"]["prevDay"].get("c")
+        except Exception as e:
+            # If we can't get the stock price, continue without enrichment
+            import sys
+            print(f"Warning: Could not fetch stock price for {underlying_asset}: {e}", file=sys.stderr)
+
+        # Enrich options data with GEX and advanced Greeks
+        if stock_price and options_list:
+            enriched_options = enrich_options_with_gex_and_advanced_greeks(options_list, stock_price)
+            data["results"] = enriched_options
+
+            # Convert enriched data to CSV (with GEX and advanced Greeks as columns)
+            return json_to_csv(data)
+        else:
+            return json_to_csv(data)
+
     except Exception as e:
         return f"Error: {e}"
 
