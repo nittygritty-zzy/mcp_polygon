@@ -6,6 +6,10 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 import json
+import requests
+import os
+
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
