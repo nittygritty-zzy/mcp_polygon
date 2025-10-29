@@ -8,8 +8,6 @@ from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
 
 
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_ticker_news(
     ticker: Optional[str] = None,

@@ -15,71 +15,21 @@ async def get_earnings_calendar_alpha_vantage(
     symbol: Optional[str] = None,
 ) -> str:
     """
-    Retrieve earnings calendar from Alpha Vantage API with analyst estimates.
+    Get earnings calendar from Alpha Vantage with analyst EPS estimates (3-12 month forecasts).
 
-    This endpoint provides earnings forecasts for up to 12 months, including analyst
-    EPS estimates and reporting dates. Data is returned in CSV format.
+    Reference: https://www.alphavantage.co/documentation/#earnings-calendar
 
-    **IMPORTANT**: This tool requires an Alpha Vantage API key.
-    Get a free key at: https://www.alphavantage.co/support/#api-key
+    **Requires Alpha Vantage API key**: https://www.alphavantage.co/support/#api-key
 
-    Parameters
-    ----------
-    alpha_vantage_api_key : str, optional
-        Your Alpha Vantage API key. If not provided, will use ALPHA_VANTAGE_API_KEY
-        environment variable. Get a free key at: https://www.alphavantage.co/support/#api-key
+    Parameters:
+    - alpha_vantage_api_key: Your API key (or set ALPHA_VANTAGE_API_KEY env var)
+    - horizon: Time period ("3month", "6month", "12month")
+    - symbol: Filter by ticker (e.g., "AAPL")
 
-    horizon : str, optional
-        Time horizon for earnings calendar (default: "3month")
-        Options: "3month", "6month", "12month"
+    Example: get_earnings_calendar_alpha_vantage(alpha_vantage_api_key="YOUR_KEY", horizon="3month")
+    Example: get_earnings_calendar_alpha_vantage(alpha_vantage_api_key="YOUR_KEY", symbol="AAPL")
 
-    symbol : str, optional
-        Filter by specific ticker symbol (e.g., "AAPL", "MSFT")
-        If not provided, returns earnings for all stocks
-
-    Returns
-    -------
-    str
-        CSV data containing earnings calendar with the following columns:
-        - symbol: Stock ticker symbol
-        - name: Company name
-        - reportDate: Expected earnings report date
-        - fiscalDateEnding: Fiscal period end date
-        - estimate: Analyst consensus EPS estimate
-        - currency: Currency of the estimate
-
-    Examples
-    --------
-    Example 1: Get 3-month earnings calendar for all stocks
-        get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="YOUR_API_KEY",
-            horizon="3month"
-        )
-
-    Example 2: Get earnings calendar for specific stock
-        get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="YOUR_API_KEY",
-            symbol="AAPL"
-        )
-
-    Example 3: Get 12-month earnings forecast
-        get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="YOUR_API_KEY",
-            horizon="12month"
-        )
-
-    Notes
-    -----
-    - Free API tier: 25 requests per day, 5 per minute
-    - Response is already in CSV format (no conversion needed)
-    - Includes analyst EPS estimates (not available in Polygon earnings calendar)
-    - Data covers 3-12 month forecasts vs. Polygon's historical data
-    - No rate limits shown in response, monitor your usage externally
-    - Data is cached as Parquet and queryable with DuckDB via query_cached_data tool
-
-    API Reference
-    -------------
-    https://www.alphavantage.co/documentation/#earnings-calendar
+    Returns: symbol, name, reportDate, fiscalDateEnding, estimate (analyst EPS), currency. Free tier: 25 requests/day.
     """
     try:
         # Get API key from parameter or environment variable

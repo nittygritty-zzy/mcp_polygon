@@ -8,9 +8,6 @@ from ..formatters import json_to_csv
 import json
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_futures_aggregates(
     ticker: str,
@@ -47,9 +44,6 @@ async def list_futures_aggregates(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_futures_contracts(
     product_code: Optional[str] = None,
@@ -84,9 +78,6 @@ async def list_futures_contracts(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_futures_contract_details(
     ticker: str,
@@ -107,9 +98,6 @@ async def get_futures_contract_details(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -152,9 +140,6 @@ async def list_futures_products(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_futures_product_details(
     product_code: str,
@@ -182,9 +167,6 @@ async def get_futures_product_details(
 # @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_futures_schedules(
     session_end_date: Optional[str] = None,
@@ -209,9 +191,6 @@ async def list_futures_schedules(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -248,9 +227,6 @@ async def list_futures_schedules_by_product_code(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_futures_market_statuses(
     product_code_any_of: Optional[str] = None,
@@ -275,9 +251,6 @@ async def list_futures_market_statuses(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

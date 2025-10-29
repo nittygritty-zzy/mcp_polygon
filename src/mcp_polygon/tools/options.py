@@ -26,50 +26,22 @@ async def list_options_contracts(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Retrieve a comprehensive index of options contracts, including both active and expired listings.
-    Returns contract details including type (call/put), exercise style, expiration date, and strike price.
+    Get options contracts index with filtering by underlying, type, strike, expiration.
 
     Reference: https://polygon.io/docs/options/get_v3_reference_options_contracts
 
-    Options contracts give the right (but not obligation) to buy (call) or sell (put) an underlying stock
-    at a specified strike price before the expiration date. Use this endpoint to explore available contracts,
-    analyze market characteristics, and develop trading strategies.
-
     Parameters:
-    - underlying_ticker: Filter by underlying stock ticker (e.g., "AAPL", "TSLA")
-    - contract_type: Filter by contract type ("call", "put")
-    - expiration_date: Filter by exact expiration date (YYYY-MM-DD)
-    - as_of: Specify point in time for contract listings (YYYY-MM-DD, defaults to today)
-    - strike_price: Filter by exact strike price
-    - expired: Include expired contracts (default: False, only active contracts)
-    - limit: Number of results to return (default: 10, max: 1000)
-    - sort: Sort field (e.g., "expiration_date", "strike_price")
-    - order: Sort order ("asc" or "desc")
-    - params: Additional filtering parameters.
-      Use comparison operators like .gte, .gt, .lte, .lt with fields like:
-      - underlying_ticker: Range filtering by ticker
-      - expiration_date: Range filtering by expiration (e.g., expiration_date.gte)
-      - strike_price: Range filtering by strike (e.g., strike_price.gte)
+    - underlying_ticker: Filter by stock (e.g., "AAPL", "TSLA")
+    - contract_type: Filter by type ("call", "put")
+    - expiration_date: Filter by expiration (YYYY-MM-DD)
+    - strike_price: Filter by strike price
+    - limit: Number of results (default: 10, max: 1000)
+    - params: Range filters (expiration_date.gte, strike_price.lte, etc.)
 
     Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", limit=50)
-             gets 50 AAPL call options contracts
-    Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01", "expiration_date.lte": "2025-12-31"})
-             gets TSLA options expiring in second half of 2025
-    Example: list_options_contracts(underlying_ticker="NVDA", contract_type="put", params={"strike_price.gte": 500, "strike_price.lte": 600})
-             gets NVDA put options with strikes between $500-$600
-    Example: list_options_contracts(underlying_ticker="SPY", expiration_date="2025-12-19", limit=100)
-             gets all SPY options expiring on December 19, 2025
+    Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01"})
 
-    Note: Understanding options contract details:
-    - Ticker format: O:AAPL251219C00150000 = Options:Apple/Dec 19 2025/Call/$150 strike
-    - Exercise style: American (can exercise anytime), European (only at expiration)
-    - Shares per contract: Typically 100 shares per contract
-    - Additional underlyings: Some contracts may have adjusted deliverables due to corporate actions
-      (stock splits, mergers, spinoffs) - check additional_underlyings field
-    - CFI code: ISO 10962 standard identifier for contract classification
-
-    Use case: Options chain analysis - retrieve all contracts for a ticker to analyze
-    strike distribution, identify liquid strikes, and spot unusual activity.
+    Returns: ticker (O:AAPL251219C00150000 format), strike, expiration, type, exercise style, shares per contract.
     """
     try:
         # Build the params dictionary
@@ -112,59 +84,19 @@ async def get_options_contract(
     as_of: Optional[Union[str, datetime, date]] = None,
 ) -> str:
     """
-    Retrieve detailed information about a specific options contract by its ticker symbol.
-    Returns contract specifications including type, strike, expiration, exercise style, and underlying details.
+    Get detailed information for a specific options contract by ticker.
 
     Reference: https://polygon.io/docs/options/get_v3_reference_options_contracts__options_ticker
 
-    Use this endpoint to get complete specifications for a known options contract. Essential for validating
-    contract details, understanding deliverables, and integrating contracts into trading strategies.
-
     Parameters:
-    - options_ticker: Options contract ticker (required)
-      Format: O:SYMBOL[YY][MM][DD][C/P][STRIKE]
-      Example: "O:AAPL251219C00150000" = Apple Dec 19 2025 Call $150 strike
-    - as_of: Specify point in time for contract details (YYYY-MM-DD, defaults to today)
-      Useful for retrieving historical contract specifications
-
-    Options ticker format breakdown:
-    - O: = Options prefix
-    - AAPL = Underlying ticker symbol
-    - 251219 = Expiration date (Dec 19, 2025 in YYMMDD format)
-    - C = Contract type (C=Call, P=Put)
-    - 00150000 = Strike price ($150.00 with 3 decimal precision)
+    - options_ticker: Contract ticker (e.g., "O:AAPL251219C00150000")
+      Format: O:SYMBOL[YYMMDD][C/P][STRIKE8]
+    - as_of: Historical date for specs (YYYY-MM-DD)
 
     Example: get_options_contract(options_ticker="O:AAPL251219C00150000")
-             gets details for Apple $150 call expiring Dec 19, 2025
     Example: get_options_contract(options_ticker="O:TSLA250620P00700000")
-             gets details for Tesla $700 put expiring June 20, 2025
-    Example: get_options_contract(options_ticker="O:SPY251219C00500000", as_of="2024-01-01")
-             gets historical contract details as of January 1, 2024
-    Example: get_options_contract(options_ticker="O:NVDA250117C01000000")
-             gets details for NVIDIA $1000 call expiring Jan 17, 2025
 
-    Response includes:
-    - contract_type: "call", "put", or "other"
-    - strike_price: Exercise price of the option
-    - expiration_date: Contract expiration date (YYYY-MM-DD)
-    - exercise_style: "american", "european", or "bermudan"
-      - American: Can exercise anytime before expiration (most U.S. stock options)
-      - European: Can only exercise at expiration
-      - Bermudan: Can exercise on specific dates
-    - shares_per_contract: Number of shares controlled (typically 100)
-    - underlying_ticker: Stock symbol the option is based on
-    - primary_exchange: MIC code of listing exchange
-    - additional_underlyings: Adjusted deliverables from corporate actions
-      - May include cash, additional stock from mergers/spinoffs
-      - Example: Stock split might result in non-standard deliverables
-    - cfi: ISO 10962 CFI code for contract classification
-
-    Note: Additional underlyings appear when corporate actions modify standard deliverables.
-    Examples include mergers, acquisitions, spinoffs, special dividends, and stock splits.
-    Always check this field before trading to understand exact deliverables.
-
-    Use case: Before executing an options trade, verify contract specifications to ensure
-    the strike price, expiration date, and deliverables match your strategy requirements.
+    Returns: type, strike, expiration, exercise_style (american/european), shares_per_contract (usually 100), underlying.
     """
     try:
         results = polygon_client.get_options_contract(
@@ -212,55 +144,22 @@ async def get_options_aggs(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get aggregate OHLC bars for an options contract over a custom date range and time interval.
-    Returns open, high, low, close, volume, and VWAP data for the specified time periods in Eastern Time (ET).
+    Get OHLC aggregate bars for an options contract over a custom date range and interval.
 
     Reference: https://polygon.io/docs/options/get_v2_aggs_ticker__optionsticker__range__multiplier___timespan___from___to
 
-    Aggregates are derived from qualifying trades only. Empty intervals indicate no trading activity.
-    Perfect for technical analysis, backtesting, and visualization of options price movements.
-
     Parameters:
-    - options_ticker: Options contract ticker (e.g., "O:AAPL251219C00150000")
-    - multiplier: Size of the timespan multiplier (e.g., 1 for 1 day, 5 for 5 minutes)
-    - timespan: Size of the time window (minute, hour, day, week, month, quarter, year)
-    - from_: Start date (YYYY-MM-DD) or timestamp in milliseconds
-    - to: End date (YYYY-MM-DD) or timestamp in milliseconds
-    - adjusted: Whether results are adjusted for splits (default: True)
-    - sort: Sort order - "asc" (oldest first) or "desc" (newest first)
-    - limit: Max base aggregates to query (default: 5000, max: 50000)
-    - params: Additional query parameters
+    - options_ticker: Contract ticker (e.g., "O:AAPL251219C00150000")
+    - multiplier: Timespan multiplier (e.g., 1, 5, 15)
+    - timespan: Time window (minute, hour, day, week, month)
+    - from_: Start date (YYYY-MM-DD)
+    - to: End date (YYYY-MM-DD)
+    - limit: Max results (default: 5000, max: 50000)
 
-    Example: get_options_aggs(options_ticker="O:AAPL251219C00150000", multiplier=1, timespan="day", from_="2025-01-01", to="2025-03-31")
-             gets daily OHLC data for Apple $150 call from Jan-Mar 2025
-    Example: get_options_aggs(options_ticker="O:SPY251219C00500000", multiplier=5, timespan="minute", from_="2025-03-20", to="2025-03-20")
-             gets 5-minute intraday bars for SPY $500 call on March 20, 2025
-    Example: get_options_aggs(options_ticker="O:TSLA250620P00700000", multiplier=1, timespan="hour", from_="2025-06-01", to="2025-06-30")
-             gets hourly bars for Tesla $700 put during June 2025
-    Example: get_options_aggs(options_ticker="O:NVDA250117C01000000", multiplier=1, timespan="week", from_="2024-01-01", to="2024-12-31", limit=10000)
-             gets weekly bars for NVIDIA $1000 call for all of 2024
+    Example: get_options_aggs("O:AAPL251219C00150000", 1, "day", "2025-01-01", "2025-03-31")
+    Example: get_options_aggs("O:SPY251219C00500000", 5, "minute", "2025-03-20", "2025-03-20")
 
-    Response fields:
-    - c: Close price (last trade price in the period)
-    - h: High price (highest trade price in the period)
-    - l: Low price (lowest trade price in the period)
-    - o: Open price (first trade price in the period)
-    - t: Timestamp (Unix milliseconds for the start of the aggregate window)
-    - v: Volume (number of contracts traded)
-    - vw: VWAP (Volume Weighted Average Price)
-    - n: Number of trades (transactions count)
-
-    Note: Options aggregate data considerations:
-    - Times are in Eastern Time (ET), not UTC
-    - Empty bars indicate no qualifying trades occurred in that period
-    - Options can be less liquid than stocks - expect more gaps in data
-    - Adjusted vs unadjusted: Most options don't need split adjustments, but use adjusted=True
-      for contracts that may have been affected by underlying stock corporate actions
-    - Intraday bars (minute/hour) capture detailed price movement for active contracts
-    - Daily/weekly bars better for longer-term analysis and less liquid contracts
-
-    Use case: Analyze options contract price behavior around earnings announcements by
-    pulling hourly bars for the week surrounding the event date.
+    Returns: o, h, l, c, v, vw (VWAP), t (timestamp), n (trades). Times in ET. Gaps indicate no trading.
     """
     try:
         results = polygon_client.get_aggs(
@@ -291,51 +190,19 @@ async def get_options_daily_open_close(
     adjusted: Optional[bool] = True,
 ) -> str:
     """
-    Get the daily open, close, high, low, and volume for a specific options contract on a given date.
-    Includes pre-market and after-hours pricing when available.
+    Get daily OHLC and volume for a specific options contract on a given date.
 
     Reference: https://polygon.io/docs/options/get_v1_open-close__optionsticker___date
 
-    Essential for daily performance analysis, historical data collection, and understanding
-    trading activity outside regular market hours.
-
     Parameters:
-    - options_ticker: Options contract ticker (e.g., "O:AAPL251219C00150000")
-    - date: The date for the requested open/close data (YYYY-MM-DD)
-    - adjusted: Whether results are adjusted for splits (default: True)
+    - options_ticker: Contract ticker (e.g., "O:AAPL251219C00150000")
+    - date: Trading date (YYYY-MM-DD)
+    - adjusted: Adjust for splits (default: True)
 
-    Example: get_options_daily_open_close(options_ticker="O:AAPL251219C00150000", date="2025-03-20")
-             gets daily OHLC for Apple $150 call on March 20, 2025
-    Example: get_options_daily_open_close(options_ticker="O:TSLA250620P00700000", date="2025-06-15")
-             gets daily OHLC for Tesla $700 put on June 15, 2025
-    Example: get_options_daily_open_close(options_ticker="O:SPY251219C00500000", date="2025-01-15", adjusted=False)
-             gets unadjusted daily OHLC for SPY $500 call
-    Example: get_options_daily_open_close(options_ticker="O:NVDA250117C01000000", date="2025-01-10")
-             gets daily OHLC for NVIDIA $1000 call
+    Example: get_options_daily_open_close("O:AAPL251219C00150000", "2025-03-20")
+    Example: get_options_daily_open_close("O:TSLA250620P00700000", "2025-06-15")
 
-    Response includes:
-    - open: Opening price for the day
-    - high: Highest price during the day
-    - low: Lowest price during the day
-    - close: Closing price for the day
-    - volume: Total contracts traded
-    - preMarket: Open price during pre-market trading (if available)
-    - afterHours: Close price during after-hours trading (if available)
-    - from: The requested date
-    - symbol: Options ticker
-    - otc: Whether this is an OTC ticker (field omitted if false)
-
-    Note: Daily open/close data considerations:
-    - Single snapshot of the entire trading day's activity
-    - Pre-market and after-hours data provide extended trading insights
-    - Volume shows total contract activity for the day
-    - Useful for quickly checking daily performance without full aggregate data
-    - Less granular than get_options_aggs but faster for single-day lookups
-    - Perfect for building daily history or tracking specific dates
-
-    Use case: After an earnings announcement, check the daily open/close to see how
-    options contracts responded - compare regular hours vs after-hours pricing to
-    gauge market reaction timing.
+    Returns: open, high, low, close, volume, preMarket, afterHours (if available).
     """
     try:
         results = polygon_client.get_daily_open_close_agg(
@@ -359,48 +226,18 @@ async def get_options_previous_close(
     adjusted: Optional[bool] = True,
 ) -> str:
     """
-    Get the previous trading day's OHLC (open, high, low, close) data for a specified options contract.
-    Provides key pricing metrics and volume to assess recent performance and inform trading strategies.
+    Get previous trading day's OHLC data for an options contract.
 
     Reference: https://polygon.io/docs/options/get_v2_aggs_ticker__optionsticker__prev
 
-    Essential for baseline comparisons, technical analysis, market research, and daily reporting.
-    Use this for quick lookups of the most recent completed trading day.
-
     Parameters:
-    - options_ticker: Options contract ticker (e.g., "O:TSLA210903C00700000")
-    - adjusted: Whether results are adjusted for splits (default: True)
+    - options_ticker: Contract ticker (e.g., "O:TSLA210903C00700000")
+    - adjusted: Adjust for splits (default: True)
 
-    Example: get_options_previous_close(options_ticker="O:TSLA210903C00700000")
-             gets previous day OHLC for Tesla call option
-    Example: get_options_previous_close(options_ticker="O:AAPL251219C00150000")
-             gets previous day OHLC for Apple $150 call
-    Example: get_options_previous_close(options_ticker="O:SPY251219P00450000", adjusted=False)
-             gets unadjusted previous day OHLC for SPY $450 put
-    Example: get_options_previous_close(options_ticker="O:NVDA250117C01000000")
-             gets previous day OHLC for NVIDIA $1000 call
+    Example: get_options_previous_close("O:TSLA210903C00700000")
+    Example: get_options_previous_close("O:AAPL251219C00150000")
 
-    Response includes:
-    - T: Ticker symbol
-    - o: Opening price
-    - h: Highest price
-    - l: Lowest price
-    - c: Closing price
-    - v: Total volume (contracts traded)
-    - vw: Volume weighted average price
-    - n: Number of transactions
-    - t: Timestamp for the aggregate window
-
-    Note: Previous day considerations:
-    - Returns data for the most recent completed trading day
-    - Faster than querying aggregates with specific date ranges
-    - Perfect for quick baseline comparisons and daily reports
-    - Volume shows total contract activity for that trading day
-    - Use for technical analysis requiring yesterday's OHLC
-    - Ideal for calculating daily changes and percentage moves
-
-    Use case: Before the market opens, check previous day's close for key options contracts
-    to establish baseline levels and identify overnight gaps when today's trading begins.
+    Returns: T (ticker), o, h, l, c, v, vw (VWAP), n (trades), t (timestamp).
     """
     try:
         results = polygon_client.get_previous_close_agg(
@@ -423,52 +260,18 @@ async def get_options_snapshot(
     option_contract: str,
 ) -> str:
     """
-    Get a comprehensive snapshot of an options contract with market data, greeks, and underlying asset info.
-    Consolidates vital metrics including break-even price, implied volatility, open interest, greeks,
-    latest quote/trade, and underlying asset price into a single response.
+    Get comprehensive snapshot of an options contract with greeks, IV, quotes, and underlying price.
 
     Reference: https://polygon.io/docs/options/get_v3_snapshot_options__underlyingasset___optioncontract
 
-    Essential for trade evaluation, market analysis, risk assessment, and strategy refinement.
-    Provides a complete view of an options contract's current state and value.
-
     Parameters:
-    - underlying_asset: Underlying ticker symbol (e.g., "AAPL", "TSLA", "SPY")
-    - option_contract: Option contract identifier (e.g., "O:AAPL230616C00150000")
+    - underlying_asset: Stock ticker (e.g., "AAPL", "TSLA")
+    - option_contract: Contract ticker (e.g., "O:AAPL230616C00150000")
 
-    Example: get_options_snapshot(underlying_asset="AAPL", option_contract="O:AAPL230616C00150000")
-             gets full snapshot for Apple $150 call expiring June 16, 2023
-    Example: get_options_snapshot(underlying_asset="TSLA", option_contract="O:TSLA210903C00700000")
-             gets snapshot for Tesla $700 call with greeks and IV
-    Example: get_options_snapshot(underlying_asset="SPY", option_contract="O:SPY251219P00450000")
-             gets snapshot for SPY $450 put with break-even analysis
-    Example: get_options_snapshot(underlying_asset="NVDA", option_contract="O:NVDA250117C01000000")
-             gets snapshot for NVIDIA $1000 call with underlying asset price
+    Example: get_options_snapshot("AAPL", "O:AAPL230616C00150000")
+    Example: get_options_snapshot("TSLA", "O:TSLA210903C00700000")
 
-    Response includes:
-    - break_even_price: Price for contract to break even (strike + premium for calls, strike - premium for puts)
-    - day: Most recent daily bar (open, high, low, close, volume, vwap, change, change_percent)
-    - details: Contract specifications (type, style, expiration, strike, shares per contract)
-    - greeks: Delta, gamma, theta, vega (if available, may be missing for deep ITM/OTM)
-    - implied_volatility: Market's forecast for underlying volatility
-    - last_quote: Most recent bid/ask with sizes and exchanges (if plan includes quotes)
-    - last_trade: Most recent trade with price, size, conditions (if plan includes trades)
-    - open_interest: Contracts held at end of last trading day
-    - underlying_asset: Current underlying stock price and change to break-even
-    - fmv: Fair Market Value (Business plans only)
-
-    Note: Snapshot data considerations:
-    - Real-time or near-real-time data depending on your plan
-    - Greeks may not be available for deep in-the-money or out-of-the-money options
-    - Break-even calculation includes premium paid
-    - Implied volatility reflects current market pricing expectations
-    - Quote and trade data availability depends on subscription tier
-    - Underlying asset data shows how far stock needs to move to reach break-even
-    - Perfect for quick contract evaluation before entering trades
-
-    Use case: Before buying a call option, check the snapshot to see current implied volatility,
-    greeks (especially delta for directional exposure), and break-even price relative to current
-    underlying price to assess risk/reward and probability of profit.
+    Returns: break_even, day (OHLC), greeks (delta/gamma/theta/vega), implied_volatility, last_quote, last_trade, open_interest.
     """
     try:
         results = polygon_client.get_snapshot_option(
@@ -513,67 +316,22 @@ async def get_options_chain_snapshot(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get comprehensive snapshots of all options contracts for a specified underlying asset.
-    Returns the full options chain with pricing, greeks, implied volatility, quotes, trades,
-    and open interest for each contract. Filter by strike price, expiration, and contract type.
+    Get full options chain snapshot with pricing, greeks, IV, and open interest for all contracts.
 
     Reference: https://polygon.io/docs/options/get_v3_snapshot_options__underlyingasset
 
-    Essential for market overview, strategy comparison, research/modeling, and portfolio refinement.
-    Examine the entire options chain in a single request to evaluate market conditions and compare contracts.
-
     Parameters:
-    - underlying_asset: Underlying ticker symbol (e.g., "AAPL", "TSLA", "SPY")
-    - strike_price: Filter by exact strike price
-    - expiration_date: Filter by expiration date (YYYY-MM-DD)
-    - contract_type: Filter by contract type ("call" or "put")
-    - strike_price_gte: Strike price greater than or equal to
-    - strike_price_gt: Strike price greater than
-    - strike_price_lte: Strike price less than or equal to
-    - strike_price_lt: Strike price less than
-    - expiration_date_gte: Expiration date greater than or equal to
-    - expiration_date_gt: Expiration date greater than
-    - expiration_date_lte: Expiration date less than or equal to
-    - expiration_date_lt: Expiration date less than
-    - order: Order results based on sort field ("asc" or "desc")
-    - limit: Number of results to return (default: 10, max: 250)
-    - sort: Field to sort by (e.g., "strike_price", "expiration_date")
-    - params: Additional query parameters
+    - underlying_asset: Stock ticker (e.g., "AAPL", "TSLA", "SPY")
+    - contract_type: Filter by type ("call" or "put")
+    - expiration_date: Filter by expiration (YYYY-MM-DD)
+    - strike_price_gte/lte: Filter by strike range
+    - expiration_date_gte/lte: Filter by expiration range
+    - limit: Number of results (default: 10, max: 250)
 
-    Example: get_options_chain_snapshot(underlying_asset="AAPL", contract_type="call", limit=50)
-             gets all call options for Apple (up to 50 contracts)
-    Example: get_options_chain_snapshot(underlying_asset="TSLA", expiration_date="2025-06-20", limit=100)
-             gets all options expiring on June 20, 2025 for Tesla
-    Example: get_options_chain_snapshot(underlying_asset="SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put")
-             gets SPY put options with strikes between $450-$500
-    Example: get_options_chain_snapshot(underlying_asset="NVDA", expiration_date_gte="2025-01-17", expiration_date_lte="2025-03-21", sort="strike_price", order="asc")
-             gets NVIDIA options expiring between Jan-Mar 2025, sorted by strike
+    Example: get_options_chain_snapshot("AAPL", contract_type="call", limit=50)
+    Example: get_options_chain_snapshot("SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put")
 
-    Response includes (for each contract):
-    - break_even_price: Price for contract to break even
-    - day: Most recent daily bar (OHLC, volume, change)
-    - details: Contract specifications (type, style, expiration, strike)
-    - greeks: Delta, gamma, theta, vega (when available)
-    - implied_volatility: Market's volatility forecast
-    - last_quote: Most recent bid/ask with sizes
-    - last_trade: Most recent trade details
-    - open_interest: Contracts held at end of last trading day
-    - underlying_asset: Current stock price and change to break-even
-    - fmv: Fair Market Value (Business plans only)
-
-    Note: Options chain considerations:
-    - Returns multiple contracts in a single request (up to 250)
-    - Filter to find specific strategies (e.g., ATM calls, vertical spreads)
-    - Compare implied volatility across strikes to identify skew
-    - Analyze open interest to gauge market positioning
-    - Use strike price ranges to focus on tradable strikes
-    - Expiration date filters help analyze specific time horizons
-    - Greeks show how contracts respond to market changes
-    - Perfect for constructing multi-leg strategies
-
-    Use case: Planning a bull call spread on AAPL - filter for calls expiring in 30-60 days
-    with strikes around current price, compare implied volatility and delta across strikes
-    to select optimal long and short legs for the spread.
+    Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract.
     """
     try:
         results = polygon_client.list_snapshot_options_chain(
