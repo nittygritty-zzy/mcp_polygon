@@ -4,7 +4,7 @@ Response formatting for Polygon MCP tools.
 Handles decision between direct CSV return vs caching with DuckDB query instructions.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import json
 
 
@@ -56,12 +56,14 @@ class ResponseFormatter:
 
         response = {
             "status": "cached",
-            "message": f"Data cached successfully. Use the duckdb_query tool to analyze the data.",
+            "message": "Data cached successfully. Use the duckdb_query tool to analyze the data.",
             "cache_info": {
                 "location": cache_metadata["cache_location"],
                 "partition_key": cache_metadata["partition_key"],
                 "row_count": cache_metadata["row_count"],
-                "file_size_mb": round(cache_metadata["file_size_bytes"] / (1024 * 1024), 2),
+                "file_size_mb": round(
+                    cache_metadata["file_size_bytes"] / (1024 * 1024), 2
+                ),
             },
             "schema": {
                 "columns": cache_metadata["columns"],
@@ -271,7 +273,9 @@ class ResponseFormatter:
 
         # Options
         elif tool_name in ["list_options_contracts", "get_options_chain_snapshot"]:
-            underlying = params.get("underlying_ticker") or params.get("underlying_asset", "UNKNOWN")
+            underlying = params.get("underlying_ticker") or params.get(
+                "underlying_asset", "UNKNOWN"
+            )
             examples = [
                 {
                     "description": "Calls vs puts",

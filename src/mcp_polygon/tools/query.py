@@ -94,6 +94,7 @@ async def list_cached_data(
             # Get info for specific tool
             info = query_tool.get_partition_info(tool_name)
             import json
+
             return json.dumps(info, indent=2)
         else:
             # List all tools with cached data
@@ -105,17 +106,23 @@ async def list_cached_data(
                 return json.dumps({"cached_tools": []}, indent=2)
 
             # Find all tool directories
-            tool_dirs = [d for d in cache_dir.iterdir() if d.is_dir() and not d.name.startswith("_")]
+            tool_dirs = [
+                d
+                for d in cache_dir.iterdir()
+                if d.is_dir() and not d.name.startswith("_")
+            ]
 
             cached_tools = []
             for tool_dir in sorted(tool_dirs):
                 info = query_tool.get_partition_info(tool_dir.name)
-                cached_tools.append({
-                    "tool_name": info["tool_name"],
-                    "partitions": len(info["partitions"]),
-                    "files": info["file_count"],
-                    "glob_pattern": info["glob_pattern"]
-                })
+                cached_tools.append(
+                    {
+                        "tool_name": info["tool_name"],
+                        "partitions": len(info["partitions"]),
+                        "files": info["file_count"],
+                        "glob_pattern": info["glob_pattern"],
+                    }
+                )
 
             return json.dumps({"cached_tools": cached_tools}, indent=2)
 

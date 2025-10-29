@@ -1,6 +1,6 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union, List
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
@@ -78,7 +78,9 @@ async def list_ticker_news(
             tool_name="list_ticker_news",
             params={
                 "ticker": ticker,
-                "published_utc_gte": str(published_utc_gte) if published_utc_gte else None,
+                "published_utc_gte": str(published_utc_gte)
+                if published_utc_gte
+                else None,
                 "limit": limit,
             },
             csv_data=csv_data,

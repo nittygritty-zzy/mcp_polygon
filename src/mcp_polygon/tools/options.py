@@ -1,15 +1,12 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union, List
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
-from ..formatters import json_to_csv
+from ..formatters import json_to_csv, enrich_options_with_gex_and_advanced_greeks
 from ..tool_integration import process_tool_response
 import json
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -75,9 +72,6 @@ async def list_options_contracts(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_options_contract(
     options_ticker: str,
@@ -111,24 +105,10 @@ async def get_options_contract(
             # Wrap the results object in an array for CSV formatting
             formatted_data = {"results": [data["results"]]}
             return json_to_csv(formatted_data)
-        # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_options_contracts",
-            params={
-                "underlying_ticker": underlying_ticker,
-                "expiration_date": expiration_date,
-                "limit": limit,
-            },
-            csv_data=csv_data,
-        )
+        return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -180,9 +160,6 @@ async def get_options_aggs(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_options_daily_open_close(
     options_ticker: str,
@@ -217,9 +194,6 @@ async def get_options_daily_open_close(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_options_previous_close(
     options_ticker: str,
@@ -249,9 +223,6 @@ async def get_options_previous_close(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -291,9 +262,6 @@ async def get_options_snapshot(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

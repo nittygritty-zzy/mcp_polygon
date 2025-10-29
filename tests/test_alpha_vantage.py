@@ -16,8 +16,7 @@ class TestAlphaVantageTools:
         api_key = "demo"  # Alpha Vantage demo key
 
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key=api_key,
-            horizon="3month"
+            alpha_vantage_api_key=api_key, horizon="3month"
         )
 
         # Check response is not empty
@@ -34,9 +33,7 @@ class TestAlphaVantageTools:
         api_key = "demo"
 
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key=api_key,
-            horizon="3month",
-            symbol="AAPL"
+            alpha_vantage_api_key=api_key, horizon="3month", symbol="AAPL"
         )
 
         # Check response is not empty
@@ -54,8 +51,7 @@ class TestAlphaVantageTools:
 
         # Test 3month horizon
         result_3m = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key=api_key,
-            horizon="3month"
+            alpha_vantage_api_key=api_key, horizon="3month"
         )
         assert result_3m is not None
 
@@ -67,8 +63,7 @@ class TestAlphaVantageTools:
     async def test_get_earnings_calendar_error_handling(self):
         """Test error handling with invalid API key."""
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="invalid_key_12345",
-            horizon="3month"
+            alpha_vantage_api_key="invalid_key_12345", horizon="3month"
         )
 
         # Should return something (Alpha Vantage might still return data with invalid key)
@@ -79,10 +74,12 @@ class TestAlphaVantageTools:
 
 if __name__ == "__main__":
     # Run tests
-    asyncio.run(asyncio.gather(
-        TestAlphaVantageTools().test_get_earnings_calendar_basic(),
-        TestAlphaVantageTools().test_get_earnings_calendar_with_symbol(),
-        TestAlphaVantageTools().test_get_earnings_calendar_different_horizons(),
-        TestAlphaVantageTools().test_get_earnings_calendar_error_handling(),
-    ))
+    asyncio.run(
+        asyncio.gather(
+            TestAlphaVantageTools().test_get_earnings_calendar_basic(),
+            TestAlphaVantageTools().test_get_earnings_calendar_with_symbol(),
+            TestAlphaVantageTools().test_get_earnings_calendar_different_horizons(),
+            TestAlphaVantageTools().test_get_earnings_calendar_error_handling(),
+        )
+    )
     print("All tests passed!")

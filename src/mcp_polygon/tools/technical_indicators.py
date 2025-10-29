@@ -1,6 +1,6 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union, List
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
@@ -99,9 +99,6 @@ async def get_sma(
         )
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

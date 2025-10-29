@@ -14,8 +14,7 @@ class TestAlphaVantageCaching:
         """Test that earnings calendar data is cached as Parquet."""
         # Call the tool
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="demo",
-            horizon="3month"
+            alpha_vantage_api_key="demo", horizon="3month"
         )
 
         # Check that we got data back (CSV or cache metadata)
@@ -23,7 +22,9 @@ class TestAlphaVantageCaching:
         assert len(result) > 0
 
         # Verify Parquet cache was created
-        cache_path = Path("cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet")
+        cache_path = Path(
+            "cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet"
+        )
         assert cache_path.exists(), f"Expected Parquet cache at {cache_path}"
 
         # Verify file is not empty
@@ -34,12 +35,13 @@ class TestAlphaVantageCaching:
         """Test that cached Parquet can be queried with DuckDB."""
         # Ensure we have cached data
         await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="demo",
-            horizon="3month"
+            alpha_vantage_api_key="demo", horizon="3month"
         )
 
         # Query the Parquet file
-        parquet_file = "cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet"
+        parquet_file = (
+            "cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet"
+        )
 
         # Test basic query
         result = duckdb.query(f"""
@@ -50,13 +52,24 @@ class TestAlphaVantageCaching:
         assert result[0] > 0, "Should have earnings records in cache"
 
         # Test column access
-        columns = duckdb.query(f"""
+        columns = (
+            duckdb.query(f"""
             SELECT * FROM read_parquet('{parquet_file}')
             LIMIT 1
-        """).to_df().columns.tolist()
+        """)
+            .to_df()
+            .columns.tolist()
+        )
 
         # Check expected columns exist
-        expected_columns = ["symbol", "name", "reportDate", "fiscalDateEnding", "estimate", "currency"]
+        expected_columns = [
+            "symbol",
+            "name",
+            "reportDate",
+            "fiscalDateEnding",
+            "estimate",
+            "currency",
+        ]
         for col in expected_columns:
             assert col in columns, f"Expected column '{col}' in cached data"
 
@@ -65,15 +78,15 @@ class TestAlphaVantageCaching:
         """Test that symbol-specific queries create separate partitions."""
         # Call with specific symbol
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="demo",
-            symbol="AAPL",
-            horizon="3month"
+            alpha_vantage_api_key="demo", symbol="AAPL", horizon="3month"
         )
 
         assert result is not None
 
         # Verify symbol-specific partition was created
-        cache_path = Path("cache/get_earnings_calendar_alpha_vantage/AAPL/3month/data.parquet")
+        cache_path = Path(
+            "cache/get_earnings_calendar_alpha_vantage/AAPL/3month/data.parquet"
+        )
         assert cache_path.exists(), f"Expected symbol-specific cache at {cache_path}"
 
     @pytest.mark.asyncio
@@ -81,11 +94,12 @@ class TestAlphaVantageCaching:
         """Test that cached data has valid structure for querying."""
         # Ensure we have cached data
         await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="demo",
-            horizon="3month"
+            alpha_vantage_api_key="demo", horizon="3month"
         )
 
-        parquet_file = "cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet"
+        parquet_file = (
+            "cache/get_earnings_calendar_alpha_vantage/all/3month/data.parquet"
+        )
 
         # Test various query patterns
         # Filter by symbol
@@ -95,7 +109,7 @@ class TestAlphaVantageCaching:
         """).to_df()
 
         if len(aapl_data) > 0:
-            assert aapl_data.iloc[0]['symbol'] == 'AAPL'
+            assert aapl_data.iloc[0]["symbol"] == "AAPL"
 
         # Filter by date range
         upcoming = duckdb.query(f"""

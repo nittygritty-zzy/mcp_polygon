@@ -1,7 +1,6 @@
 """Test Alpha Vantage with environment variable."""
 
 import pytest
-import os
 from src.mcp_polygon.tools.alpha_vantage import get_earnings_calendar_alpha_vantage
 
 
@@ -30,8 +29,7 @@ class TestAlphaVantageEnvironment:
 
         # Pass correct key as parameter
         result = await get_earnings_calendar_alpha_vantage(
-            alpha_vantage_api_key="demo",
-            horizon="3month"
+            alpha_vantage_api_key="demo", horizon="3month"
         )
 
         # Should work with parameter key

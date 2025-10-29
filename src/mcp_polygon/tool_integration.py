@@ -4,7 +4,7 @@ Integration helper for adding caching to Polygon MCP tools.
 Provides a simple wrapper to enable caching with minimal code changes.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import csv
 import io
 

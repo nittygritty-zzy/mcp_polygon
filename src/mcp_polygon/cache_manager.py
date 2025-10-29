@@ -4,7 +4,6 @@ Cache management for Polygon MCP tools.
 Handles Parquet file storage, partitioning schemes, TTL, and size limits.
 """
 
-import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -174,7 +173,9 @@ class CacheManager:
                 short_window = params.get("short_window", 12)
                 long_window = params.get("long_window", 26)
                 signal_window = params.get("signal_window", 9)
-                param_str = f"short_{short_window}_long_{long_window}_signal_{signal_window}"
+                param_str = (
+                    f"short_{short_window}_long_{long_window}_signal_{signal_window}"
+                )
             else:
                 param_str = "default"
 
@@ -182,12 +183,18 @@ class CacheManager:
 
         # Options
         elif tool_name in ["list_options_contracts", "get_options_chain_snapshot"]:
-            underlying = params.get("underlying_ticker") or params.get("underlying_asset", "UNKNOWN")
+            underlying = params.get("underlying_ticker") or params.get(
+                "underlying_asset", "UNKNOWN"
+            )
             expiration = params.get("expiration_date", "all")
             return f"{underlying}/{expiration}"
 
         # Options aggregates
-        elif tool_name in ["get_options_aggs", "get_options_daily_open_close", "get_options_previous_close"]:
+        elif tool_name in [
+            "get_options_aggs",
+            "get_options_daily_open_close",
+            "get_options_previous_close",
+        ]:
             options_ticker = params.get("options_ticker", "UNKNOWN")
             # Extract underlying and expiration from options ticker format
             # O:AAPL251219C00150000 -> AAPL/2025-12-19
@@ -198,7 +205,7 @@ class CacheManager:
                     for i, char in enumerate(parts):
                         if char.isdigit():
                             underlying = parts[:i]
-                            date_part = parts[i:i+6]
+                            date_part = parts[i : i + 6]
                             if len(date_part) == 6:
                                 year = int("20" + date_part[:2])
                                 month = int(date_part[2:4])
@@ -211,7 +218,11 @@ class CacheManager:
             return options_ticker
 
         # Economics data
-        elif tool_name in ["list_treasury_yields", "list_inflation", "list_inflation_expectations"]:
+        elif tool_name in [
+            "list_treasury_yields",
+            "list_inflation",
+            "list_inflation_expectations",
+        ]:
             date = params.get("date_gte") or params.get("date")
             if date:
                 try:
@@ -252,7 +263,9 @@ class CacheManager:
             param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
             return f"params_{param_hash}"
 
-    def should_cache(self, tool_name: str, params: Dict[str, Any], response_size_bytes: int) -> bool:
+    def should_cache(
+        self, tool_name: str, params: Dict[str, Any], response_size_bytes: int
+    ) -> bool:
         """
         Determine if a response should be cached based on tool, parameters, and size.
 
@@ -261,7 +274,11 @@ class CacheManager:
         """
 
         # Rule 1: Never cache real-time/volatile data
-        if tool_name in ["get_snapshot_ticker", "list_universal_snapshots", "get_market_status"]:
+        if tool_name in [
+            "get_snapshot_ticker",
+            "list_universal_snapshots",
+            "get_market_status",
+        ]:
             return False
 
         # Rule 2: Always cache reference data (changes rarely)
@@ -468,7 +485,9 @@ class CacheManager:
         )
 
         # Remove oldest entries until under limit
-        while self.metadata["total_size_bytes"] > self.max_size_bytes and sorted_entries:
+        while (
+            self.metadata["total_size_bytes"] > self.max_size_bytes and sorted_entries
+        ):
             cache_key, _ = sorted_entries.pop(0)
             self._remove_entry(cache_key)
 
@@ -492,8 +511,12 @@ class CacheManager:
         return {
             "total_entries": len(self.metadata["entries"]),
             "total_size_bytes": self.metadata["total_size_bytes"],
-            "total_size_mb": round(self.metadata["total_size_bytes"] / (1024 * 1024), 2),
-            "total_size_gb": round(self.metadata["total_size_bytes"] / (1024 * 1024 * 1024), 2),
+            "total_size_mb": round(
+                self.metadata["total_size_bytes"] / (1024 * 1024), 2
+            ),
+            "total_size_gb": round(
+                self.metadata["total_size_bytes"] / (1024 * 1024 * 1024), 2
+            ),
             "max_size_gb": self.max_size_bytes / (1024 * 1024 * 1024),
             "ttl_days": self.ttl_days,
             "last_cleanup": self.metadata.get("last_cleanup"),

@@ -1,6 +1,6 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union, List
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
@@ -349,9 +349,6 @@ async def list_financials_cash_flow_statements(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_financials_income_statements(
     cik: Optional[str] = None,
@@ -481,9 +478,6 @@ async def list_financials_income_statements(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_financials_ratios(
     cik: Optional[str] = None,
@@ -566,9 +560,6 @@ async def list_financials_ratios(
         )
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -853,9 +844,6 @@ async def list_stock_ratios(
         return f"Error: {e}"
 
 
-
-
-
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_short_interest(
     ticker: Optional[str] = None,
@@ -957,9 +945,6 @@ async def list_short_interest(
         )
     except Exception as e:
         return f"Error: {e}"
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

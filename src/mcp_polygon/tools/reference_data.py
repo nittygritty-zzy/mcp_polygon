@@ -1,14 +1,11 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union, List
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
-
-
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

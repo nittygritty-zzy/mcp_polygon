@@ -3,7 +3,6 @@ Tests for DuckDB query tool.
 """
 
 import pytest
-import os
 import tempfile
 import shutil
 from pathlib import Path
@@ -26,14 +25,16 @@ def temp_cache_dir():
     aggs_dir.mkdir(parents=True)
 
     # Sample OHLC data
-    df = pd.DataFrame({
-        "t": [1727755200000, 1727841600000, 1727928000000],
-        "o": [229.52, 226.5, 228.0],
-        "h": [229.65, 227.8, 229.5],
-        "l": [223.74, 224.1, 226.2],
-        "c": [226.21, 227.0, 228.5],
-        "v": [63235048, 45123456, 52987654],
-    })
+    df = pd.DataFrame(
+        {
+            "t": [1727755200000, 1727841600000, 1727928000000],
+            "o": [229.52, 226.5, 228.0],
+            "h": [229.65, 227.8, 229.5],
+            "l": [223.74, 224.1, 226.2],
+            "c": [226.21, 227.0, 228.5],
+            "v": [63235048, 45123456, 52987654],
+        }
+    )
 
     table = pa.Table.from_pandas(df)
     pq.write_table(table, aggs_dir / "data.parquet")
@@ -105,6 +106,7 @@ def test_query_json_format(temp_cache_dir):
     result = tool.query(sql, format="json")
 
     import json
+
     data = json.loads(result)
     assert isinstance(data, list)
     assert len(data) == 1

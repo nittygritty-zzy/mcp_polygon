@@ -6,7 +6,7 @@ Provides SQL query interface to cached Parquet files with security constraints.
 
 import duckdb
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 import json
 import csv
 import io
@@ -86,7 +86,9 @@ class DuckDBQueryTool:
         import re
 
         # Pattern: read_parquet('path') or read_parquet("path")
-        parquet_paths = re.findall(r"read_parquet\s*\(\s*['\"]([^'\"]+)['\"]", sql, re.IGNORECASE)
+        parquet_paths = re.findall(
+            r"read_parquet\s*\(\s*['\"]([^'\"]+)['\"]", sql, re.IGNORECASE
+        )
 
         if not parquet_paths:
             # No file references - might be a metadata query, allow it
@@ -162,11 +164,7 @@ class DuckDBQueryTool:
         tool_dir = self.cache_dir / tool_name
 
         if not tool_dir.exists():
-            return {
-                "tool_name": tool_name,
-                "exists": False,
-                "partitions": []
-            }
+            return {"tool_name": tool_name, "exists": False, "partitions": []}
 
         # Find all Parquet files
         parquet_files = list(tool_dir.rglob("*.parquet"))
@@ -184,12 +182,13 @@ class DuckDBQueryTool:
             "exists": True,
             "partitions": sorted(partitions),
             "file_count": len(parquet_files),
-            "glob_pattern": f"{tool_dir}/**/*.parquet"
+            "glob_pattern": f"{tool_dir}/**/*.parquet",
         }
 
 
 class SecurityError(Exception):
     """Raised when query violates security constraints."""
+
     pass
 
 

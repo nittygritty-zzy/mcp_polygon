@@ -1,8 +1,7 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union
+from typing import Optional, Any, Dict
 from mcp.types import ToolAnnotations
-from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 
