@@ -4,6 +4,8 @@ from typing import Optional
 from mcp.types import ToolAnnotations
 from ..clients import poly_mcp
 import requests
+from pathlib import Path
+from datetime import datetime
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -46,6 +48,8 @@ async def get_earnings_calendar_alpha_vantage(
         - estimate: Analyst consensus EPS estimate
         - currency: Currency of the estimate
 
+        The data is also saved to: mcp_polygon/cache/earnings/earnings_{horizon}_{symbol}_{timestamp}.csv
+
     Examples
     --------
     Example 1: Get 3-month earnings calendar for all stocks
@@ -73,6 +77,7 @@ async def get_earnings_calendar_alpha_vantage(
     - Includes analyst EPS estimates (not available in Polygon earnings calendar)
     - Data covers 3-12 month forecasts vs. Polygon's historical data
     - No rate limits shown in response, monitor your usage externally
+    - Data is automatically cached to mcp_polygon/cache/earnings/ directory with timestamp
 
     API Reference
     -------------
@@ -102,8 +107,21 @@ async def get_earnings_calendar_alpha_vantage(
         if response.text.startswith("{"):
             return f"Error: {response.text}"
 
-        # Return CSV data directly
-        return response.text
+        # Create cache directory if it doesn't exist
+        cache_dir = Path("mcp_polygon/cache/earnings")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename with timestamp and parameters
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        symbol_suffix = f"_{symbol}" if symbol else "_all"
+        filename = f"earnings_{horizon}{symbol_suffix}_{timestamp}.csv"
+        filepath = cache_dir / filename
+
+        # Save CSV data to file
+        filepath.write_text(response.text)
+
+        # Return CSV data with file location info
+        return f"Data saved to: {filepath}\n\n{response.text}"
 
     except Exception as e:
         return f"Error fetching Alpha Vantage earnings calendar: {e}"
