@@ -7,7 +7,7 @@ import pytest
 from datetime import datetime, timedelta
 
 # Add src to path
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
 # Check for API key
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
@@ -36,7 +36,7 @@ def assert_csv_output(result: str):
     assert isinstance(result, str), "Result should be a string"
     assert len(result) > 0, "Result should not be empty"
     # Check for CSV structure (headers + data rows)
-    lines = result.strip().split('\n')
+    lines = result.strip().split("\n")
     assert len(lines) >= 1, "Should have at least header row"
     if len(lines) > 1:
         # If there's data, check comma-separated format (or single column)
@@ -55,6 +55,7 @@ last_year = today - timedelta(days=365)
 # ============================================================================
 # AGGREGATES MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_get_aggs():
@@ -101,6 +102,7 @@ async def test_get_daily_open_close_agg():
 # SNAPSHOTS MODULE TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_get_snapshot_ticker():
     """Test get_snapshot_ticker for AAPL."""
@@ -141,6 +143,7 @@ async def test_get_snapshot_direction():
 # ============================================================================
 # TECHNICAL INDICATORS MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_get_sma():
@@ -192,6 +195,7 @@ async def test_get_rsi():
 # ============================================================================
 # REFERENCE DATA MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_list_tickers():
@@ -263,6 +267,7 @@ async def test_list_conditions():
 # CORPORATE ACTIONS MODULE TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_list_splits():
     """Test list_splits."""
@@ -306,6 +311,7 @@ async def test_list_ipos():
 # ============================================================================
 # FINANCIALS MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_list_financials_income_statements():
@@ -375,6 +381,7 @@ async def test_list_short_volume():
 # NEWS MODULE TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_list_ticker_news():
     """Test list_ticker_news."""
@@ -388,6 +395,7 @@ async def test_list_ticker_news():
 # ============================================================================
 # ECONOMICS MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_list_treasury_yields():
@@ -423,6 +431,7 @@ async def test_list_inflation_expectations():
 # OPTIONS MODULE TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_list_options_contracts():
     """Test list_options_contracts."""
@@ -444,11 +453,11 @@ async def test_get_options_contract():
         limit=1,
     )
     # Extract first ticker from CSV if available
-    if contracts and '\n' in contracts:
-        lines = contracts.split('\n')
+    if contracts and "\n" in contracts:
+        lines = contracts.split("\n")
         if len(lines) > 1:  # Has header + data
             # Assume ticker is first column
-            first_data_row = lines[1].split(',')
+            first_data_row = lines[1].split(",")
             if first_data_row:
                 options_ticker = first_data_row[0]
                 result = await options.get_options_contract(
@@ -472,6 +481,7 @@ async def test_get_options_chain_snapshot():
 # FUTURES MODULE TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_list_futures_contracts():
     """Test list_futures_contracts."""
@@ -484,6 +494,7 @@ async def test_list_futures_contracts():
 # ============================================================================
 # CURRENCY MODULE TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_get_real_time_currency_conversion():
@@ -503,4 +514,5 @@ async def test_get_real_time_currency_conversion():
 if __name__ == "__main__":
     # Run with pytest
     import sys
+
     sys.exit(pytest.main([__file__, "-v", "-s"]))

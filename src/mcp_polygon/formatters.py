@@ -85,7 +85,9 @@ def _flatten_dict(
     return dict(items)
 
 
-def calculate_gex(options_data: List[Dict[str, Any]], stock_price: float) -> Dict[str, Any]:
+def calculate_gex(
+    options_data: List[Dict[str, Any]], stock_price: float
+) -> Dict[str, Any]:
     """
     Calculate Gamma Exposure (GEX) from options chain data.
 
@@ -123,7 +125,7 @@ def calculate_gex(options_data: List[Dict[str, Any]], stock_price: float) -> Dic
 
             # Calculate GEX for this contract
             # GEX = OI × Gamma × 100 × Price²
-            gex_value = open_interest * gamma * 100 * (stock_price ** 2)
+            gex_value = open_interest * gamma * 100 * (stock_price**2)
 
             # Puts are negative GEX
             if contract_type == "put":
@@ -179,7 +181,9 @@ def calculate_gex(options_data: List[Dict[str, Any]], stock_price: float) -> Dic
     }
 
 
-def _interpret_gex(total_gex: float, stock_price: float, max_gex_strike: Optional[float]) -> str:
+def _interpret_gex(
+    total_gex: float, stock_price: float, max_gex_strike: Optional[float]
+) -> str:
     """
     Provide human-readable interpretation of GEX values.
 
@@ -237,7 +241,6 @@ def enrich_options_with_gex_and_advanced_greeks(
     Returns:
         Enriched list with additional calculated fields
     """
-    import math
 
     enriched_data = []
 
@@ -261,39 +264,50 @@ def enrich_options_with_gex_and_advanced_greeks(
             # Calculate GEX if we have required data
             if gamma is not None and open_interest > 0:
                 # GEX = OI × Gamma × 100 × Price²
-                gex_value = open_interest * gamma * 100 * (stock_price ** 2)
+                gex_value = open_interest * gamma * 100 * (stock_price**2)
 
                 # Puts are negative GEX
                 if contract_type == "put":
                     gex_value = -gex_value
 
                 enriched_option["gex"] = round(gex_value, 2)
-                enriched_option["gex_dollars"] = round(gex_value * stock_price / 1_000_000, 2)  # In millions
+                enriched_option["gex_dollars"] = round(
+                    gex_value * stock_price / 1_000_000, 2
+                )  # In millions
             else:
                 enriched_option["gex"] = None
                 enriched_option["gex_dollars"] = None
 
             # Calculate advanced Greeks (approximations based on Black-Scholes)
             # These require additional data, so we'll provide reasonable estimates
-            if all(x is not None for x in [delta, gamma, vega, theta, implied_vol, strike]):
+            if all(
+                x is not None for x in [delta, gamma, vega, theta, implied_vol, strike]
+            ):
                 # Time to expiration (estimate from expiration date)
                 expiration_date = option.get("details", {}).get("expiration_date")
                 if expiration_date:
-                    from datetime import datetime, date as date_type
+                    from datetime import datetime
+
                     if isinstance(expiration_date, str):
                         exp_date = datetime.strptime(expiration_date, "%Y-%m-%d").date()
                     else:
                         exp_date = expiration_date
                     today = datetime.now().date()
                     days_to_expiry = (exp_date - today).days
-                    time_to_expiry = max(days_to_expiry / 365.0, 0.001)  # In years, avoid zero
+                    time_to_expiry = max(
+                        days_to_expiry / 365.0, 0.001
+                    )  # In years, avoid zero
                 else:
                     time_to_expiry = 0.083  # Default to ~1 month
 
                 # Charm (dDelta/dTime) - Delta decay
                 # Charm ≈ -Gamma × (r × Strike - q × Stock) / (2 × Time × Stock)
                 # Simplified: Charm ≈ -Gamma × Strike / (2 × Time × Stock)
-                charm = -gamma * strike / (2 * time_to_expiry * stock_price) if time_to_expiry > 0 else 0
+                charm = (
+                    -gamma * strike / (2 * time_to_expiry * stock_price)
+                    if time_to_expiry > 0
+                    else 0
+                )
                 enriched_option["greeks_charm"] = round(charm, 6)
 
                 # Vanna (dDelta/dVol or dVega/dPrice) - Delta sensitivity to volatility
@@ -342,7 +356,7 @@ def enrich_options_with_gex_and_advanced_greeks(
                 enriched_option["greeks_speed"] = None
                 enriched_option["greeks_color"] = None
 
-        except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
             # On error, set all new fields to None
             enriched_option["gex"] = None
             enriched_option["gex_dollars"] = None

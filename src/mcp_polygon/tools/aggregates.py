@@ -1,11 +1,10 @@
 """Auto-generated tool definitions."""
-from typing import Optional, Any, Dict, Union, List
+
+from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-import json
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -98,6 +97,7 @@ async def get_aggs(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
+
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
@@ -236,6 +236,7 @@ async def list_aggs(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
+
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
@@ -457,6 +458,7 @@ async def get_grouped_daily_aggs(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
+
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
@@ -731,6 +733,7 @@ async def get_daily_open_close_agg(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
+
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
@@ -1063,4 +1066,3 @@ async def get_previous_close_agg(
 
 
 # @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
-

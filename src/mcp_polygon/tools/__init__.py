@@ -20,6 +20,7 @@ from . import economics
 from . import options
 from . import futures
 from . import currency
+from . import alpha_vantage
 
 __all__ = [
     "aggregates",
@@ -33,4 +34,5 @@ __all__ = [
     "options",
     "futures",
     "currency",
+    "alpha_vantage",
 ]

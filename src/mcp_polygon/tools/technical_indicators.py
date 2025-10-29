@@ -1,11 +1,10 @@
 """Auto-generated tool definitions."""
+
 from typing import Optional, Any, Dict, Union, List
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-import json
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -879,6 +878,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -1031,6 +1031,7 @@ async def get_sma(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -1902,6 +1903,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -2186,6 +2188,7 @@ async def get_ema(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -3057,6 +3060,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -3494,6 +3498,7 @@ async def get_macd(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -4365,6 +4370,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -4962,4 +4968,3 @@ async def get_rsi(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
-

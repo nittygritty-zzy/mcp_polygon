@@ -1,11 +1,11 @@
 """Auto-generated tool definitions."""
+
 from typing import Optional, Any, Dict, Union, List
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 import json
-
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -879,6 +879,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -6573,6 +6574,7 @@ async def list_options_contracts(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -7444,6 +7446,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -13216,6 +13219,7 @@ async def get_options_contract(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -14087,6 +14091,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -19941,6 +19946,7 @@ async def get_options_aggs(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -20812,6 +20818,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -26732,6 +26739,7 @@ async def get_options_daily_open_close(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -27603,6 +27611,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -33584,6 +33593,7 @@ async def get_options_previous_close(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -34455,6 +34465,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -40509,6 +40520,7 @@ async def get_options_snapshot(
     except Exception as e:
         return f"Error: {e}"
 
+
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_aggs(
     ticker: str,
@@ -41380,6 +41392,7 @@ async def get_snapshot_option(
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         import traceback
+
         return f"Error: {e}\nTraceback: {traceback.format_exc()}"
 
 
@@ -47564,16 +47577,26 @@ async def get_options_chain_snapshot(
             if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
                 stock_price = snapshot_data["ticker"]["day"].get("c")  # Closing price
             # Fallback: try prevDay close if day close not available
-            if not stock_price and "ticker" in snapshot_data and "prevDay" in snapshot_data["ticker"]:
+            if (
+                not stock_price
+                and "ticker" in snapshot_data
+                and "prevDay" in snapshot_data["ticker"]
+            ):
                 stock_price = snapshot_data["ticker"]["prevDay"].get("c")
         except Exception as e:
             # If we can't get the stock price, continue without enrichment
             import sys
-            print(f"Warning: Could not fetch stock price for {underlying_asset}: {e}", file=sys.stderr)
+
+            print(
+                f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
+                file=sys.stderr,
+            )
 
         # Enrich options data with GEX and advanced Greeks
         if stock_price and options_list:
-            enriched_options = enrich_options_with_gex_and_advanced_greeks(options_list, stock_price)
+            enriched_options = enrich_options_with_gex_and_advanced_greeks(
+                options_list, stock_price
+            )
             data["results"] = enriched_options
 
             # Convert enriched data to CSV (with GEX and advanced Greeks as columns)
@@ -47586,4 +47609,3 @@ async def get_options_chain_snapshot(
 
 
 # @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))  # DISABLED
-

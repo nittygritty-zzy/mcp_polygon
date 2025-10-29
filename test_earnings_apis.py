@@ -30,7 +30,7 @@ av_url = "https://www.alphavantage.co/query"
 av_params = {
     "function": "EARNINGS_CALENDAR",
     "horizon": "3month",
-    "apikey": ALPHA_VANTAGE_KEY
+    "apikey": ALPHA_VANTAGE_KEY,
 }
 
 av_start = time.time()
@@ -41,12 +41,15 @@ try:
     if av_response.status_code == 200:
         # Parse CSV response
         from io import StringIO
+
         av_df = pd.read_csv(StringIO(av_response.text))
 
-        print(f"✅ Status: SUCCESS")
+        print("✅ Status: SUCCESS")
         print(f"⏱️  Response Time: {av_elapsed:.2f} seconds")
         print(f"📊 Total Records: {len(av_df)}")
-        print(f"📅 Date Range: {av_df['reportDate'].min()} to {av_df['reportDate'].max()}")
+        print(
+            f"📅 Date Range: {av_df['reportDate'].min()} to {av_df['reportDate'].max()}"
+        )
         print(f"🏢 Unique Companies: {av_df['symbol'].nunique()}")
         print()
         print("📋 Data Columns:")
@@ -59,27 +62,31 @@ try:
         # Filter for this week
         today = datetime.now().date()
         week_end = today + timedelta(days=7)
-        av_df['reportDate'] = pd.to_datetime(av_df['reportDate']).dt.date
-        av_this_week = av_df[(av_df['reportDate'] >= today) & (av_df['reportDate'] <= week_end)]
+        av_df["reportDate"] = pd.to_datetime(av_df["reportDate"]).dt.date
+        av_this_week = av_df[
+            (av_df["reportDate"] >= today) & (av_df["reportDate"] <= week_end)
+        ]
 
         print(f"🗓️  This Week's Earnings ({today} to {week_end}):")
         print(f"   Total: {len(av_this_week)} companies")
         if len(av_this_week) > 0:
-            print(f"   Sample companies: {', '.join(av_this_week['symbol'].head(10).tolist())}")
+            print(
+                f"   Sample companies: {', '.join(av_this_week['symbol'].head(10).tolist())}"
+            )
         print()
 
         av_success = True
         av_data = av_df
 
     else:
-        print(f"❌ Status: FAILED")
+        print("❌ Status: FAILED")
         print(f"   HTTP {av_response.status_code}: {av_response.text[:200]}")
         av_success = False
         av_data = None
 
 except Exception as e:
     av_elapsed = time.time() - av_start
-    print(f"❌ Status: ERROR")
+    print("❌ Status: ERROR")
     print(f"   Error: {e}")
     av_success = False
     av_data = None
@@ -101,12 +108,12 @@ try:
 
     for i in range(8):  # Today + next 7 days
         date = today + timedelta(days=i)
-        date_str = date.strftime('%Y-%m-%d')
+        date_str = date.strftime("%Y-%m-%d")
         try:
             daily_earnings = get_earnings_by_date(date_str)
             if daily_earnings:
                 nasdaq_results.extend(daily_earnings)
-        except Exception as e:
+        except Exception:
             # Some dates may have no data or errors
             pass
 
@@ -115,10 +122,12 @@ try:
     if nasdaq_results:
         nasdaq_df = pd.DataFrame(nasdaq_results)
 
-        print(f"✅ Status: SUCCESS")
+        print("✅ Status: SUCCESS")
         print(f"⏱️  Response Time: {nasdaq_elapsed:.2f} seconds (8 API calls)")
         print(f"📊 Total Records: {len(nasdaq_df)}")
-        print(f"🏢 Unique Companies: {nasdaq_df['symbol'].nunique() if 'symbol' in nasdaq_df.columns else 'N/A'}")
+        print(
+            f"🏢 Unique Companies: {nasdaq_df['symbol'].nunique() if 'symbol' in nasdaq_df.columns else 'N/A'}"
+        )
         print()
         print("📋 Data Columns:")
         print(f"   {', '.join(nasdaq_df.columns.tolist())}")
@@ -131,15 +140,15 @@ try:
         nasdaq_data = nasdaq_df
 
     else:
-        print(f"⚠️  Status: NO DATA")
-        print(f"   No earnings found for the next 8 days")
+        print("⚠️  Status: NO DATA")
+        print("   No earnings found for the next 8 days")
         print(f"⏱️  Response Time: {nasdaq_elapsed:.2f} seconds")
         nasdaq_success = True  # API worked, just no data
         nasdaq_data = None
 
 except Exception as e:
     nasdaq_elapsed = time.time() - nasdaq_start
-    print(f"❌ Status: ERROR")
+    print("❌ Status: ERROR")
     print(f"   Error: {e}")
     nasdaq_success = False
     nasdaq_data = None
@@ -164,28 +173,34 @@ comparison = {
         "Data Freshness",
         "Output Format",
         "Ease of Use (1-5)",
-        "Status"
+        "Status",
     ],
     "Alpha Vantage": [
         "✅ Yes",
         f"{av_elapsed:.2f}s" if av_success else "N/A",
         f"{len(av_data)} (3 months)" if av_success and av_data is not None else "N/A",
-        f"{len(av_this_week)} companies" if av_success and av_data is not None else "N/A",
+        f"{len(av_this_week)} companies"
+        if av_success and av_data is not None
+        else "N/A",
         "3-12 month forecast",
         "CSV",
         "⭐⭐⭐⭐ (4/5)",
-        "✅ Success" if av_success else "❌ Failed"
+        "✅ Success" if av_success else "❌ Failed",
     ],
     "NASDAQ (finance_calendars)": [
         "❌ No",
         f"{nasdaq_elapsed:.2f}s (8 calls)" if nasdaq_success else "N/A",
-        f"{len(nasdaq_data)} (8 days)" if nasdaq_success and nasdaq_data is not None else "0 (No data)",
-        f"{len(nasdaq_data)} companies" if nasdaq_success and nasdaq_data is not None else "0",
+        f"{len(nasdaq_data)} (8 days)"
+        if nasdaq_success and nasdaq_data is not None
+        else "0 (No data)",
+        f"{len(nasdaq_data)} companies"
+        if nasdaq_success and nasdaq_data is not None
+        else "0",
         "Real-time from exchange",
         "JSON/Dict",
         "⭐⭐⭐⭐⭐ (5/5)",
-        "✅ Success" if nasdaq_success else "❌ Failed"
-    ]
+        "✅ Success" if nasdaq_success else "❌ Failed",
+    ],
 }
 
 comp_df = pd.DataFrame(comparison)

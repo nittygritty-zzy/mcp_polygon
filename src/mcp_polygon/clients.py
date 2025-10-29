@@ -1,4 +1,5 @@
 """Shared client instances for the Polygon MCP server."""
+
 import os
 import logging
 import warnings
@@ -13,6 +14,7 @@ warnings.filterwarnings("ignore", message=".*Tool already exists.*")
 # Also suppress Rich console warnings if possible
 try:
     from rich.logging import RichHandler
+
     logging.getLogger().handlers = []  # Clear existing handlers
     logging.getLogger().addHandler(logging.NullHandler())  # Add null handler
 except ImportError:
