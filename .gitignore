@@ -30,3 +30,6 @@ Thumbs.db
 
 # Private documents
 private_doc/
+
+# Cache directory
+cache/

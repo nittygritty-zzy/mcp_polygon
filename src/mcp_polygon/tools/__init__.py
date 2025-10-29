@@ -21,6 +21,7 @@ from . import options
 from . import futures
 from . import currency
 from . import alpha_vantage
+from . import query
 
 __all__ = [
     "aggregates",
@@ -35,4 +36,5 @@ __all__ = [
     "futures",
     "currency",
     "alpha_vantage",
+    "query",
 ]
