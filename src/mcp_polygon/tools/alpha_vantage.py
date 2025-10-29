@@ -40,15 +40,14 @@ async def get_earnings_calendar_alpha_vantage(
     Returns
     -------
     str
-        CSV-formatted string containing earnings calendar data with columns:
+        File path where the earnings calendar CSV data was saved.
+        The CSV file contains the following columns:
         - symbol: Stock ticker symbol
         - name: Company name
         - reportDate: Expected earnings report date
         - fiscalDateEnding: Fiscal period end date
         - estimate: Analyst consensus EPS estimate
         - currency: Currency of the estimate
-
-        The data is also saved to: mcp_polygon/cache/earnings/earnings_{horizon}_{symbol}_{timestamp}.csv
 
     Examples
     --------
@@ -120,8 +119,8 @@ async def get_earnings_calendar_alpha_vantage(
         # Save CSV data to file
         filepath.write_text(response.text)
 
-        # Return CSV data with file location info
-        return f"Data saved to: {filepath}\n\n{response.text}"
+        # Return only the file path
+        return str(filepath.absolute())
 
     except Exception as e:
         return f"Error fetching Alpha Vantage earnings calendar: {e}"
