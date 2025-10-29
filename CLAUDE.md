@@ -129,7 +129,7 @@ The server implements tools for all major Polygon.io API endpoints:
 - **News & Insights**: Benzinga news and analyst data (`list_ticker_news`, `list_benzinga_*`)
 - **Futures**: Contracts, quotes, trades, schedules (`list_futures_*`, `get_futures_*`)
 - **Economics**: Treasury yields, inflation, and expectations (`list_treasury_yields`, `list_inflation`, `list_inflation_expectations`)
-- **Options**: Options contracts index, details, pricing data, and snapshots (`list_options_contracts`, `get_options_contract`, `get_options_aggs`, `get_options_daily_open_close`, `get_options_previous_close`, `get_options_snapshot`, `get_options_chain_snapshot`)
+- **Options**: Options contracts index, details, pricing data, and snapshots (`list_options_contracts`, `get_options_contract`, `get_options_aggs`, `get_options_daily_open_close`, `get_options_previous_close`, `get_options_snapshot`, `list_snapshot_options_chain`)
 
 ### API Documentation References
 

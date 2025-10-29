@@ -17,6 +17,7 @@ async def list_treasury_yields(
     date_gt: Optional[Union[str, datetime, date]] = None,
     date_gte: Optional[Union[str, datetime, date]] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
@@ -28,29 +29,58 @@ async def list_treasury_yields(
 
     Parameters:
     - date_gte: Filter dates >= this date (YYYY-MM-DD)
-    - limit: Number of results (default: 10, max: 50000)
+    - limit: Number of results per page (default: 10, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_treasury_yields(date_gte="2025-01-01", limit=100)
-    Example: list_treasury_yields(date="2025-03-15")
+    RECOMMENDED: Always use fetch_all=True to cache complete treasury yield data locally for efficient DuckDB analysis.
+
+    Example: list_treasury_yields(date_gte="2025-01-01", fetch_all=True)
+    Example: list_treasury_yields(date="2025-03-15", fetch_all=True)
 
     Returns: yield_1_month through yield_30_year. Inverted curve (short > long) signals recession risk.
     """
     try:
-        results = polygon_client.list_treasury_yields(
-            date=date,
-            date_lt=date_lt,
-            date_lte=date_lte,
-            date_gt=date_gt,
-            date_gte=date_gte,
-            limit=limit,
-            sort=sort,
-            order=order,
-            params=params,
-            raw=True,
-        )
+        yields_list = []
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_treasury_yields(
+                date=date,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=False,
+            ):
+                yields_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_treasury_yields(
+                date=date,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            yields_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": yields_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -58,6 +88,7 @@ async def list_treasury_yields(
             params={
                 "date_gte": date_gte,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -74,6 +105,7 @@ async def list_inflation(
     date_lt: Optional[Union[str, datetime, date]] = None,
     date_lte: Optional[Union[str, datetime, date]] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -84,29 +116,58 @@ async def list_inflation(
 
     Parameters:
     - date_gte: Filter dates >= this date (YYYY-MM-DD)
-    - limit: Number of results (default: 10, max: 50000)
+    - limit: Number of results per page (default: 10, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_inflation(date_gte="2024-01-01", limit=12)
-    Example: list_inflation(date="2025-06-01")
+    RECOMMENDED: Always use fetch_all=True to cache complete inflation data locally for efficient DuckDB analysis.
+
+    Example: list_inflation(date_gte="2024-01-01", fetch_all=True)
+    Example: list_inflation(date="2025-06-01", fetch_all=True)
 
     Returns: CPI, CPI Core, PCE, PCE Core (Fed's preferred measure), YoY changes. Fed targets 2% PCE Core.
     """
     try:
-        results = polygon_client.list_inflation(
-            date=date,
-            date_any_of=date_any_of,
-            date_gt=date_gt,
-            date_gte=date_gte,
-            date_lt=date_lt,
-            date_lte=date_lte,
-            limit=limit,
-            sort=sort,
-            params=params,
-            raw=True,
-        )
+        inflation_list = []
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_inflation(
+                date=date,
+                date_any_of=date_any_of,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                limit=limit,
+                sort=sort,
+                params=params,
+                raw=False,
+            ):
+                inflation_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_inflation(
+                date=date,
+                date_any_of=date_any_of,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                limit=limit,
+                sort=sort,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            inflation_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": inflation_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -114,6 +175,7 @@ async def list_inflation(
             params={
                 "date_gte": date_gte,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -130,6 +192,7 @@ async def list_inflation_expectations(
     date_lt: Optional[Union[str, datetime, date]] = None,
     date_lte: Optional[Union[str, datetime, date]] = None,
     limit: Optional[int] = 100,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -140,10 +203,13 @@ async def list_inflation_expectations(
 
     Parameters:
     - date_gte: Filter dates >= this date (YYYY-MM-DD)
-    - limit: Number of results (default: 100, max: 50000)
+    - limit: Number of results per page (default: 100, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_inflation_expectations(date_gte="2024-01-01", limit=250)
-    Example: list_inflation_expectations(date="2025-06-17")
+    RECOMMENDED: Always use fetch_all=True to cache complete inflation expectations data locally for efficient DuckDB analysis.
+
+    Example: list_inflation_expectations(date_gte="2024-01-01", fetch_all=True)
+    Example: list_inflation_expectations(date="2025-06-17", fetch_all=True)
 
     Returns: market_5_year, market_10_year (TIPS breakeven), model_1/5/10/30_year (Cleveland Fed), forward_years_5_to_10.
     """
@@ -162,25 +228,57 @@ async def list_inflation_expectations(
             request_params["date.lt"] = date_lt
         if date_lte:
             request_params["date.lte"] = date_lte
-        if limit:
-            request_params["limit"] = limit
         if sort:
             request_params["sort"] = sort
 
-        # Make the request to the inflation expectations endpoint
-        results = polygon_client._get(
-            "/fed/v1/inflation-expectations", params=request_params
-        )
+        expectations_list = []
+
+        if fetch_all:
+            # Use maximum limit for fetching all data
+            request_params["limit"] = 50000
+
+            # Make the request to the inflation expectations endpoint
+            results = polygon_client._get(
+                "/fed/v1/inflation-expectations", params=request_params
+            )
+
+            import json
+            if isinstance(results, str):
+                data = json.loads(results)
+            else:
+                data = results
+
+            expectations_list = data.get("results", [])
+        else:
+            # Single page approach with specified limit
+            request_params["limit"] = limit
+
+            # Make the request to the inflation expectations endpoint
+            results = polygon_client._get(
+                "/fed/v1/inflation-expectations", params=request_params
+            )
+
+            import json
+            if isinstance(results, str):
+                data = json.loads(results)
+            else:
+                data = results
+
+            expectations_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": expectations_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results)
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_inflation_expectations",
             params={
                 "date_gte": date_gte,
-                "limit": limit,
+                "limit": limit if not fetch_all else 50000,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )

@@ -18,6 +18,7 @@ async def get_aggs(
     adjusted: Optional[bool] = None,
     sort: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -31,33 +32,62 @@ async def get_aggs(
     - to: End date (YYYY-MM-DD or timestamp)
     - adjusted: Adjust for splits (default: True)
     - sort: Sort order - "asc" or "desc" (default: asc)
-    - limit: Max results (default: 10, max: 50000)
+    - limit: Max results per page (default: 10, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
+
+    RECOMMENDED: Always use fetch_all=True to cache complete OHLC data locally for efficient DuckDB analysis.
 
     Returns: OHLC data with columns: o, h, l, c, v (volume), vw (VWAP), t (timestamp), n (trades)
 
     Examples:
-    - Daily: get_aggs("AAPL", 1, "day", "2023-01-01", "2023-01-31")
-    - Intraday: get_aggs("MSFT", 5, "minute", "2023-06-15", "2023-06-15", limit=100)
-    - Weekly: get_aggs("SPY", 1, "week", "2022-01-01", "2022-12-31")
+    - Daily: get_aggs("AAPL", 1, "day", "2023-01-01", "2023-01-31", fetch_all=True)
+    - Intraday: get_aggs("MSFT", 5, "minute", "2023-06-15", "2023-06-15", fetch_all=True)
+    - Weekly: get_aggs("SPY", 1, "week", "2022-01-01", "2022-12-31", fetch_all=True)
 
     Note: Covers pre-market, regular, and after-hours sessions (ET). Use higher limits for longer ranges.
     """
     try:
-        results = polygon_client.get_aggs(
-            ticker=ticker,
-            multiplier=multiplier,
-            timespan=timespan,
-            from_=from_,
-            to=to,
-            adjusted=adjusted,
-            sort=sort,
-            limit=limit,
-            params=params,
-            raw=True,
-        )
+        aggs_list = []
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.get_aggs(
+                ticker=ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=False,
+            ):
+                aggs_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.get_aggs(
+                ticker=ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            aggs_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": aggs_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -69,6 +99,7 @@ async def get_aggs(
                 "from_": str(from_),
                 "to": str(to),
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -86,6 +117,7 @@ async def list_aggs(
     adjusted: Optional[bool] = None,
     sort: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -100,23 +132,52 @@ async def list_aggs(
     - adjusted: Adjust for splits (default: True)
     - sort: Sort order - "asc" or "desc"
     - limit: Max results per page (default: 10)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
+
+    RECOMMENDED: Always use fetch_all=True to cache complete OHLC data locally for efficient DuckDB analysis.
     """
     try:
-        results = polygon_client.list_aggs(
-            ticker=ticker,
-            multiplier=multiplier,
-            timespan=timespan,
-            from_=from_,
-            to=to,
-            adjusted=adjusted,
-            sort=sort,
-            limit=limit,
-            params=params,
-            raw=True,
-        )
+        aggs_list = []
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_aggs(
+                ticker=ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=False,
+            ):
+                aggs_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_aggs(
+                ticker=ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            aggs_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": aggs_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -128,6 +189,7 @@ async def list_aggs(
                 "from_": str(from_),
                 "to": str(to),
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )

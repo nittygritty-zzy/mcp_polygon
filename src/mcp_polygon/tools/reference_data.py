@@ -78,6 +78,7 @@ async def list_tickers(
     sort: Optional[str] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -92,45 +93,81 @@ async def list_tickers(
     - active: Only active tickers (default: None)
     - ticker_gte/lt: Ticker range filters
     - exchange: Exchange MIC code (e.g., XNYS, XNAS)
-    - limit: Number of results (default: 10, max: 1000)
+    - limit: Number of results per page (default: 10, max: 1000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_tickers(market="stocks", active=True, limit=100)
-    Example: list_tickers(search="Apple", market="stocks")
+    RECOMMENDED: Always use fetch_all=True to cache complete ticker data locally for efficient DuckDB analysis.
+
+    Example: list_tickers(market="stocks", active=True, fetch_all=True)
+    Example: list_tickers(search="Apple", market="stocks", fetch_all=True)
 
     Returns: ticker, name, market, type, active, primary_exchange, currency, cik.
     """
     try:
-        results = polygon_client.list_tickers(
-            ticker=ticker,
-            type=type,
-            market=market,
-            exchange=exchange,
-            cusip=cusip,
-            cik=cik,
-            date=date,
-            search=search,
-            active=active,
-            sort=sort,
-            order=order,
-            limit=limit,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "ticker.gte": ticker_gte,
-                        "ticker.gt": ticker_gt,
-                        "ticker.lte": ticker_lte,
-                        "ticker.lt": ticker_lt,
-                    }.items()
-                    if v is not None
-                },
+        tickers_list = []
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "ticker.gte": ticker_gte,
+                    "ticker.gt": ticker_gt,
+                    "ticker.lte": ticker_lte,
+                    "ticker.lt": ticker_lt,
+                }.items()
+                if v is not None
             },
-            raw=True,
-        )
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for ticker_obj in polygon_client.list_tickers(
+                ticker=ticker,
+                type=type,
+                market=market,
+                exchange=exchange,
+                cusip=cusip,
+                cik=cik,
+                date=date,
+                search=search,
+                active=active,
+                sort=sort,
+                order=order,
+                limit=limit,
+                params=param_dict,
+                raw=False,
+            ):
+                # Convert Ticker object to dict
+                tickers_list.append(ticker_obj.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_tickers(
+                ticker=ticker,
+                type=type,
+                market=market,
+                exchange=exchange,
+                cusip=cusip,
+                cik=cik,
+                date=date,
+                search=search,
+                active=active,
+                sort=sort,
+                order=order,
+                limit=limit,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            tickers_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": tickers_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -139,6 +176,7 @@ async def list_tickers(
                 "market": market,
                 "active": active,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -152,6 +190,7 @@ async def get_all_tickers(
     type: Optional[str] = None,
     active: Optional[bool] = True,
     limit: Optional[int] = 100,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = "ticker",
     order: Optional[str] = "asc",
     params: Optional[Dict[str, Any]] = None,
@@ -164,21 +203,66 @@ async def get_all_tickers(
     - market: Filter by market type (stocks, crypto, fx, otc, indices)
     - type: Filter by security type (CS=Common Stock, ETF, etc.)
     - active: Include only active tickers (default: True)
-    - limit: Number of results to return (default: 100)
+    - limit: Number of results per page (default: 100)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
+
+    RECOMMENDED: Always use fetch_all=True to cache complete ticker data locally for efficient DuckDB analysis.
+
+    Example: get_all_tickers(market="stocks", active=True, fetch_all=True)
+    Example: get_all_tickers(market="crypto", fetch_all=True)
     """
     try:
-        results = polygon_client.list_tickers(
-            market=market,
-            type=type,
-            active=active,
-            sort=sort,
-            order=order,
-            limit=limit,
-            params=params,
-            raw=True,
-        )
+        tickers_list = []
 
-        return json_to_csv(results.data.decode("utf-8"))
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for ticker_obj in polygon_client.list_tickers(
+                market=market,
+                type=type,
+                active=active,
+                sort=sort,
+                order=order,
+                limit=limit,
+                params=params,
+                raw=False,
+            ):
+                # Convert Ticker object to dict
+                tickers_list.append(ticker_obj.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_tickers(
+                market=market,
+                type=type,
+                active=active,
+                sort=sort,
+                order=order,
+                limit=limit,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            tickers_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": tickers_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="get_all_tickers",
+            params={
+                "market": market,
+                "type": type,
+                "active": active,
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"
 

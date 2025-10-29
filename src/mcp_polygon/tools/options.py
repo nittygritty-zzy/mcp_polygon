@@ -20,6 +20,7 @@ async def list_options_contracts(
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
     order: Optional[str] = None,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -32,42 +33,77 @@ async def list_options_contracts(
     - contract_type: Filter by type ("call", "put")
     - expiration_date: Filter by expiration (YYYY-MM-DD)
     - strike_price: Filter by strike price
-    - limit: Number of results (default: 10, max: 1000)
+    - limit: Number of results per page (default: 10, max: 1000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
     - params: Range filters (expiration_date.gte, strike_price.lte, etc.)
 
-    Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", limit=50)
-    Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01"})
+    RECOMMENDED: Always use fetch_all=True to cache complete data locally for efficient DuckDB analysis.
+
+    Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", fetch_all=True)
+    Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01"}, fetch_all=True)
 
     Returns: ticker (O:AAPL251219C00150000 format), strike, expiration, type, exercise style, shares per contract.
     """
     try:
-        # Build the params dictionary
-        request_params = params or {}
-        if underlying_ticker:
-            request_params["underlying_ticker"] = underlying_ticker
-        if contract_type:
-            request_params["contract_type"] = contract_type
-        if expiration_date:
-            request_params["expiration_date"] = expiration_date
-        if as_of:
-            request_params["as_of"] = as_of
-        if strike_price is not None:
-            request_params["strike_price"] = strike_price
-        if expired is not None:
-            request_params["expired"] = expired
-        if limit:
-            request_params["limit"] = limit
-        if sort:
-            request_params["sort"] = sort
-        if order:
-            request_params["order"] = order
+        contracts_list = []
 
-        # Make the request to the options contracts endpoint
-        results = polygon_client._get(
-            "/v3/reference/options/contracts", params=request_params
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for contract in polygon_client.list_options_contracts(
+                underlying_ticker=underlying_ticker,
+                contract_type=contract_type,
+                expiration_date=expiration_date,
+                as_of=as_of,
+                strike_price=strike_price,
+                expired=expired,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=False,
+            ):
+                # Convert OptionsContract object to dict
+                contracts_list.append(contract.to_dict())
+        else:
+            # Single page approach (existing behavior)
+            results = polygon_client.list_options_contracts(
+                underlying_ticker=underlying_ticker,
+                contract_type=contract_type,
+                expiration_date=expiration_date,
+                as_of=as_of,
+                strike_price=strike_price,
+                expired=expired,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=True,
+            )
+
+            # Parse the JSON response
+            data = json.loads(results.data.decode("utf-8"))
+            contracts_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": contracts_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="list_options_contracts",
+            params={
+                "underlying_ticker": underlying_ticker,
+                "contract_type": contract_type,
+                "expiration_date": str(expiration_date) if expiration_date else None,
+                "strike_price": strike_price,
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
         )
 
-        return json_to_csv(results)
     except Exception as e:
         return f"Error: {e}"
 
@@ -121,6 +157,7 @@ async def get_options_aggs(
     adjusted: Optional[bool] = True,
     sort: Optional[str] = None,
     limit: Optional[int] = 5000,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -134,28 +171,82 @@ async def get_options_aggs(
     - timespan: Time window (minute, hour, day, week, month)
     - from_: Start date (YYYY-MM-DD)
     - to: End date (YYYY-MM-DD)
-    - limit: Max results (default: 5000, max: 50000)
+    - limit: Max results per page (default: 5000, max: 50000)
+    - fetch_all: If True (recommended), fetch all data and cache to disk for DuckDB queries (default: True)
 
-    Example: get_options_aggs("O:AAPL251219C00150000", 1, "day", "2025-01-01", "2025-03-31")
-    Example: get_options_aggs("O:SPY251219C00500000", 5, "minute", "2025-03-20", "2025-03-20")
+    Example: get_options_aggs("O:AAPL251219C00150000", 1, "day", "2025-01-01", "2025-03-31", fetch_all=True)
+    Example: get_options_aggs("O:SPY251219C00500000", 5, "minute", "2025-03-20", "2025-03-20", fetch_all=True)
 
     Returns: o, h, l, c, v, vw (VWAP), t (timestamp), n (trades). Times in ET. Gaps indicate no trading.
     """
     try:
-        results = polygon_client.get_aggs(
-            ticker=options_ticker,
-            multiplier=multiplier,
-            timespan=timespan,
-            from_=from_,
-            to=to,
-            adjusted=adjusted,
-            sort=sort,
-            limit=limit,
-            params=params,
-            raw=True,
-        )
+        aggs_list = []
 
-        return json_to_csv(results.data.decode("utf-8"))
+        if fetch_all:
+            # Use list approach for automatic pagination
+            aggs_data = polygon_client.get_aggs(
+                ticker=options_ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=False,
+            )
+            # Convert Agg objects to dict
+            for agg in aggs_data:
+                aggs_list.append(
+                    {
+                        "o": agg.open,
+                        "h": agg.high,
+                        "l": agg.low,
+                        "c": agg.close,
+                        "v": agg.volume,
+                        "vw": agg.vwap,
+                        "t": agg.timestamp,
+                        "n": agg.transactions,
+                    }
+                )
+        else:
+            # Single page approach
+            results = polygon_client.get_aggs(
+                ticker=options_ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=from_,
+                to=to,
+                adjusted=adjusted,
+                sort=sort,
+                limit=limit,
+                params=params,
+                raw=True,
+            )
+            data = json.loads(results.data.decode("utf-8"))
+            aggs_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": aggs_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="get_options_aggs",
+            params={
+                "options_ticker": options_ticker,
+                "multiplier": multiplier,
+                "timespan": timespan,
+                "from_": str(from_),
+                "to": str(to),
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -243,6 +334,7 @@ async def get_options_snapshot(
     Example: get_options_snapshot("TSLA", "O:TSLA210903C00700000")
 
     Returns: break_even, day (OHLC), greeks (delta/gamma/theta/vega), implied_volatility, last_quote, last_trade, open_interest.
+             Includes enriched GEX and advanced Greeks (charm, vanna, vomma, zomma, speed, color).
     """
     try:
         results = polygon_client.get_snapshot_option(
@@ -255,17 +347,56 @@ async def get_options_snapshot(
         import json
 
         data = json.loads(results.data.decode("utf-8"))
+
+        options_list = []
         if "results" in data:
-            # Wrap the results object in an array for CSV formatting
-            formatted_data = {"results": [data["results"]]}
+            options_list = [data["results"]]
+
+        # Get current stock price for GEX/Greeks calculations
+        stock_price = None
+        try:
+            snapshot_result = polygon_client.get_snapshot_ticker(
+                market_type="stocks",
+                ticker=underlying_asset,
+                raw=True,
+            )
+            snapshot_data = json.loads(snapshot_result.data.decode("utf-8"))
+            if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
+                stock_price = snapshot_data["ticker"]["day"].get("c")  # Closing price
+            # Fallback: try prevDay close if day close not available
+            if (
+                not stock_price
+                and "ticker" in snapshot_data
+                and "prevDay" in snapshot_data["ticker"]
+            ):
+                stock_price = snapshot_data["ticker"]["prevDay"].get("c")
+        except Exception as e:
+            # If we can't get the stock price, continue without enrichment
+            import sys
+            print(
+                f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
+                file=sys.stderr,
+            )
+
+        # Enrich options data with GEX and advanced Greeks
+        if stock_price and options_list:
+            enriched_options = enrich_options_with_gex_and_advanced_greeks(
+                options_list, stock_price
+            )
+            options_list = enriched_options
+
+        # Format for CSV
+        if options_list:
+            formatted_data = {"results": options_list}
             return json_to_csv(formatted_data)
+
         return json_to_csv(results.data.decode("utf-8"))
     except Exception as e:
         return f"Error: {e}"
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-async def get_options_chain_snapshot(
+async def list_snapshot_options_chain(
     underlying_asset: str,
     strike_price: Optional[float] = None,
     expiration_date: Optional[Union[str, date]] = None,
@@ -281,6 +412,7 @@ async def get_options_chain_snapshot(
     order: Optional[str] = None,
     limit: Optional[int] = 10,
     sort: Optional[str] = None,
+    fetch_all: Optional[bool] = True,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -294,17 +426,22 @@ async def get_options_chain_snapshot(
     - expiration_date: Filter by expiration (YYYY-MM-DD)
     - strike_price_gte/lte: Filter by strike range
     - expiration_date_gte/lte: Filter by expiration range
-    - limit: Number of results (default: 10, max: 250)
+    - limit: Number of results per page (default: 10, max: 250)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: get_options_chain_snapshot("AAPL", contract_type="call", limit=50)
-    Example: get_options_chain_snapshot("SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put")
+    RECOMMENDED: Always use fetch_all=True to cache complete options chain data locally for efficient DuckDB analysis.
 
-    Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract.
+    Example: list_snapshot_options_chain("AAPL", contract_type="call", fetch_all=True)
+    Example: list_snapshot_options_chain("SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put", fetch_all=True)
+
+    Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract. Includes GEX and advanced greeks.
     """
     try:
-        results = polygon_client.list_snapshot_options_chain(
-            underlying_asset=underlying_asset,
-            params={
+        options_list = []
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            param_dict = {
                 **(params or {}),
                 **{
                     k: v
@@ -326,15 +463,49 @@ async def get_options_chain_snapshot(
                     }.items()
                     if v is not None
                 },
-            },
-            raw=True,
-        )
+            }
 
-        # Parse the JSON response to calculate GEX
-        data = json.loads(results.data.decode("utf-8"))
+            # Use SDK iterator (raw=False) for automatic pagination
+            for option_snapshot in polygon_client.list_snapshot_options_chain(
+                underlying_asset=underlying_asset,
+                params=param_dict,
+                raw=False,
+            ):
+                # Convert OptionContractSnapshot object to dict
+                options_list.append(option_snapshot.to_dict())
+        else:
+            # Single page approach (existing behavior)
+            results = polygon_client.list_snapshot_options_chain(
+                underlying_asset=underlying_asset,
+                params={
+                    **(params or {}),
+                    **{
+                        k: v
+                        for k, v in {
+                            "strike_price": strike_price,
+                            "expiration_date": expiration_date,
+                            "contract_type": contract_type,
+                            "strike_price.gte": strike_price_gte,
+                            "strike_price.gt": strike_price_gt,
+                            "strike_price.lte": strike_price_lte,
+                            "strike_price.lt": strike_price_lt,
+                            "expiration_date.gte": expiration_date_gte,
+                            "expiration_date.gt": expiration_date_gt,
+                            "expiration_date.lte": expiration_date_lte,
+                            "expiration_date.lt": expiration_date_lt,
+                            "order": order,
+                            "limit": limit,
+                            "sort": sort,
+                        }.items()
+                        if v is not None
+                    },
+                },
+                raw=True,
+            )
 
-        # Extract options data
-        options_list = data.get("results", [])
+            # Parse the JSON response
+            data = json.loads(results.data.decode("utf-8"))
+            options_list = data.get("results", [])
 
         # Get current stock price by fetching the underlying ticker snapshot
         stock_price = None
@@ -368,20 +539,24 @@ async def get_options_chain_snapshot(
             enriched_options = enrich_options_with_gex_and_advanced_greeks(
                 options_list, stock_price
             )
-            data["results"] = enriched_options
+            options_list = enriched_options
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": options_list, "status": "OK"}
 
         # Convert to CSV
         csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
-            tool_name="get_options_chain_snapshot",
+            tool_name="list_snapshot_options_chain",
             params={
                 "underlying_asset": underlying_asset,
                 "strike_price": strike_price,
                 "expiration_date": str(expiration_date) if expiration_date else None,
                 "contract_type": contract_type,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )

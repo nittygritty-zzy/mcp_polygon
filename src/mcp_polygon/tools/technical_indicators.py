@@ -19,6 +19,7 @@ async def get_sma(
     expand_underlying: Optional[bool] = False,
     order: Optional[str] = "desc",
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
     timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
     timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
@@ -36,11 +37,14 @@ async def get_sma(
     - window: Period for calculation (default: 50)
     - timespan: Aggregation period ("day", "hour", "minute")
     - series_type: Price type ("close", "open", "high", "low")
-    - limit: Number of results (default: 10, max: 5000)
+    - limit: Number of results per request (default: 10, max: 5000)
+    - fetch_all: If True (recommended), fetch maximum data (5000 points) and cache to disk for DuckDB queries (default: True)
 
-    Example: get_sma("AAPL", window=50, timespan="day")
-    Example: get_sma("MSFT", window=200, limit=30)
-    Example: get_sma("O:SPY241220P00720000", window=20)
+    RECOMMENDED: Always use fetch_all=True to cache complete indicator data locally for efficient DuckDB analysis.
+
+    Example: get_sma("AAPL", window=50, timespan="day", fetch_all=True)
+    Example: get_sma("MSFT", window=200, fetch_all=True)
+    Example: get_sma("O:SPY241220P00720000", window=20, fetch_all=True)
 
     Returns: timestamp, value. Common windows: 50-day, 200-day. Golden Cross (50>200)=bullish, Death Cross (50<200)=bearish.
     """
@@ -56,6 +60,9 @@ async def get_sma(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
+        # Use maximum limit when fetch_all is True
+        actual_limit = 5000 if fetch_all else limit
+
         # Build kwargs conditionally to avoid passing empty params
         kwargs = {
             "ticker": ticker,
@@ -65,7 +72,7 @@ async def get_sma(
             "series_type": series_type,
             "expand_underlying": expand_underlying,
             "order": order,
-            "limit": limit,
+            "limit": actual_limit,
             "raw": True,
         }
         if timestamp is not None:
@@ -93,7 +100,8 @@ async def get_sma(
                 "ticker": ticker,
                 "window": window,
                 "timespan": timespan,
-                "limit": limit,
+                "limit": actual_limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -112,6 +120,7 @@ async def get_ema(
     expand_underlying: Optional[bool] = False,
     order: Optional[str] = "desc",
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
     timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
     timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
@@ -129,11 +138,14 @@ async def get_ema(
     - window: Period for calculation (default: 50)
     - timespan: Aggregation period ("day", "hour", "minute")
     - series_type: Price type ("close", "open", "high", "low")
-    - limit: Number of results (default: 10, max: 5000)
+    - limit: Number of results per request (default: 10, max: 5000)
+    - fetch_all: If True (recommended), fetch maximum data (5000 points) and cache to disk for DuckDB queries (default: True)
 
-    Example: get_ema("AAPL", window=12, timespan="day")
-    Example: get_ema("MSFT", window=26, limit=30)
-    Example: get_ema("O:SPY241220P00720000", window=12)
+    RECOMMENDED: Always use fetch_all=True to cache complete indicator data locally for efficient DuckDB analysis.
+
+    Example: get_ema("AAPL", window=12, timespan="day", fetch_all=True)
+    Example: get_ema("MSFT", window=26, fetch_all=True)
+    Example: get_ema("O:SPY241220P00720000", window=12, fetch_all=True)
 
     Returns: timestamp, value. Common windows: 12, 26 (MACD components), 50, 200. More responsive than SMA.
     """
@@ -149,6 +161,9 @@ async def get_ema(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
+        # Use maximum limit when fetch_all is True
+        actual_limit = 5000 if fetch_all else limit
+
         # Build kwargs conditionally to avoid passing empty params
         kwargs = {
             "ticker": ticker,
@@ -158,7 +173,7 @@ async def get_ema(
             "series_type": series_type,
             "expand_underlying": expand_underlying,
             "order": order,
-            "limit": limit,
+            "limit": actual_limit,
             "raw": True,
         }
         if timestamp is not None:
@@ -186,7 +201,8 @@ async def get_ema(
                 "ticker": ticker,
                 "window": window,
                 "timespan": timespan,
-                "limit": limit,
+                "limit": actual_limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -207,6 +223,7 @@ async def get_macd(
     expand_underlying: Optional[bool] = False,
     order: Optional[str] = "desc",
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
     timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
     timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
@@ -225,11 +242,14 @@ async def get_macd(
     - long_window: Slow EMA period (default: 26)
     - signal_window: Signal line period (default: 9)
     - timespan: Aggregation period ("day", "hour", "minute")
-    - limit: Number of results (default: 10, max: 5000)
+    - limit: Number of results per request (default: 10, max: 5000)
+    - fetch_all: If True (recommended), fetch maximum data (5000 points) and cache to disk for DuckDB queries (default: True)
 
-    Example: get_macd("AAPL")  # Standard 12,26,9
-    Example: get_macd("MSFT", short_window=8, long_window=17, signal_window=9)
-    Example: get_macd("O:SPY241220P00720000", limit=50)
+    RECOMMENDED: Always use fetch_all=True to cache complete indicator data locally for efficient DuckDB analysis.
+
+    Example: get_macd("AAPL", fetch_all=True)  # Standard 12,26,9
+    Example: get_macd("MSFT", short_window=8, long_window=17, signal_window=9, fetch_all=True)
+    Example: get_macd("O:SPY241220P00720000", fetch_all=True)
 
     Returns: timestamp, value (MACD line), signal (signal line), histogram. Bullish: MACD crosses above signal.
     """
@@ -245,6 +265,9 @@ async def get_macd(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
+        # Use maximum limit when fetch_all is True
+        actual_limit = 5000 if fetch_all else limit
+
         # Build kwargs conditionally to avoid passing empty params
         kwargs = {
             "ticker": ticker,
@@ -256,7 +279,7 @@ async def get_macd(
             "series_type": series_type,
             "expand_underlying": expand_underlying,
             "order": order,
-            "limit": limit,
+            "limit": actual_limit,
             "raw": True,
         }
         if timestamp is not None:
@@ -285,7 +308,8 @@ async def get_macd(
                 "short_window": short_window,
                 "long_window": long_window,
                 "signal_window": signal_window,
-                "limit": limit,
+                "limit": actual_limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -304,6 +328,7 @@ async def get_rsi(
     expand_underlying: Optional[bool] = False,
     order: Optional[str] = "desc",
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     timestamp_gte: Optional[Union[str, int, datetime, date]] = None,
     timestamp_gt: Optional[Union[str, int, datetime, date]] = None,
     timestamp_lte: Optional[Union[str, int, datetime, date]] = None,
@@ -319,10 +344,13 @@ async def get_rsi(
     - ticker: Symbol (e.g., "AAPL" for stocks, "O:SPY241220P00720000" for options)
     - window: Period for calculation (default: 14)
     - timespan: Aggregation period ("day", "hour", "minute")
-    - limit: Number of results (default: 10)
+    - limit: Number of results per request (default: 10, max: 5000)
+    - fetch_all: If True (recommended), fetch maximum data (5000 points) and cache to disk for DuckDB queries (default: True)
 
-    Example: get_rsi(ticker="TSLA", window=14, limit=100)
-    Example: get_rsi(ticker="O:NVDA251219C00800000", window=14, timespan="day")
+    RECOMMENDED: Always use fetch_all=True to cache complete indicator data locally for efficient DuckDB analysis.
+
+    Example: get_rsi(ticker="TSLA", window=14, fetch_all=True)
+    Example: get_rsi(ticker="O:NVDA251219C00800000", window=14, timespan="day", fetch_all=True)
 
     Returns: timestamp, value (RSI 0-100, <30 oversold, >70 overbought)
     """
@@ -338,6 +366,9 @@ async def get_rsi(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
+        # Use maximum limit when fetch_all is True
+        actual_limit = 5000 if fetch_all else limit
+
         # Build kwargs conditionally to avoid passing empty params
         kwargs = {
             "ticker": ticker,
@@ -347,7 +378,7 @@ async def get_rsi(
             "series_type": series_type,
             "expand_underlying": expand_underlying,
             "order": order,
-            "limit": limit,
+            "limit": actual_limit,
             "raw": True,
         }
         if timestamp is not None:
@@ -375,7 +406,8 @@ async def get_rsi(
                 "ticker": ticker,
                 "window": window,
                 "timespan": timespan,
-                "limit": limit,
+                "limit": actual_limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )

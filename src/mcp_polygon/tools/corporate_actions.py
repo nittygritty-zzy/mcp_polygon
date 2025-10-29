@@ -23,6 +23,7 @@ async def list_splits(
     execution_date_lt: Optional[Union[str, datetime, date]] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -36,43 +37,72 @@ async def list_splits(
     - execution_date: Split execution date (YYYY-MM-DD)
     - reverse_split: Filter by type (True=reverse splits, False=forward splits)
     - execution_date_gte/lte: Date range filters
-    - limit: Number of results (default: 10, max: 1000)
+    - limit: Number of results per page (default: 10, max: 1000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_splits(ticker="AAPL")
-    Example: list_splits(reverse_split=True, limit=50)
+    RECOMMENDED: Always use fetch_all=True to cache complete split data locally for efficient DuckDB analysis.
+
+    Example: list_splits(ticker="AAPL", fetch_all=True)
+    Example: list_splits(reverse_split=True, fetch_all=True)
 
     Returns: ticker, execution_date, split_to, split_from. Ratio: split_to-for-split_from (e.g., 2-for-1).
     """
     try:
-        results = polygon_client.list_splits(
-            ticker=ticker,
-            execution_date=execution_date,
-            reverse_split=reverse_split,
-            limit=limit,
-            sort=sort,
-            order=order,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "ticker.gte": ticker_gte,
-                        "ticker.gt": ticker_gt,
-                        "ticker.lte": ticker_lte,
-                        "ticker.lt": ticker_lt,
-                        "execution_date.gte": execution_date_gte,
-                        "execution_date.gt": execution_date_gt,
-                        "execution_date.lte": execution_date_lte,
-                        "execution_date.lt": execution_date_lt,
-                    }.items()
-                    if v is not None
-                },
+        splits_list = []
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "ticker.gte": ticker_gte,
+                    "ticker.gt": ticker_gt,
+                    "ticker.lte": ticker_lte,
+                    "ticker.lt": ticker_lt,
+                    "execution_date.gte": execution_date_gte,
+                    "execution_date.gt": execution_date_gt,
+                    "execution_date.lte": execution_date_lte,
+                    "execution_date.lt": execution_date_lt,
+                }.items()
+                if v is not None
             },
-            raw=True,
-        )
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_splits(
+                ticker=ticker,
+                execution_date=execution_date,
+                reverse_split=reverse_split,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=param_dict,
+                raw=False,
+            ):
+                splits_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_splits(
+                ticker=ticker,
+                execution_date=execution_date,
+                reverse_split=reverse_split,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            splits_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": splits_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -80,6 +110,7 @@ async def list_splits(
             params={
                 "ticker": ticker,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -123,6 +154,7 @@ async def list_dividends(
     cash_amount_lt: Optional[float] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -138,64 +170,98 @@ async def list_dividends(
     - dividend_type: Type ("CD"=cash, "SC"=special, "LT"/"ST"=capital gains)
     - cash_amount_gte/lte: Filter by dividend amount
     - ex_dividend_date_gte/lte: Date range filters
-    - limit: Number of results (default: 10, max: 1000)
+    - limit: Number of results per page (default: 10, max: 1000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_dividends(ticker="AAPL")
-    Example: list_dividends(frequency=4, cash_amount_gte=1.0, limit=100)
+    RECOMMENDED: Always use fetch_all=True to cache complete dividend data locally for efficient DuckDB analysis.
+
+    Example: list_dividends(ticker="AAPL", fetch_all=True)
+    Example: list_dividends(frequency=4, cash_amount_gte=1.0, fetch_all=True)
 
     Returns: ticker, cash_amount, currency, declaration_date, ex_dividend_date, record_date, pay_date, frequency, dividend_type.
     """
     try:
-        results = polygon_client.list_dividends(
-            ticker=ticker,
-            ex_dividend_date=ex_dividend_date,
-            record_date=record_date,
-            declaration_date=declaration_date,
-            pay_date=pay_date,
-            frequency=frequency,
-            cash_amount=cash_amount,
-            dividend_type=dividend_type,
-            limit=limit,
-            sort=sort,
-            order=order,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "ticker.gte": ticker_gte,
-                        "ticker.gt": ticker_gt,
-                        "ticker.lte": ticker_lte,
-                        "ticker.lt": ticker_lt,
-                        "ex_dividend_date.gte": ex_dividend_date_gte,
-                        "ex_dividend_date.gt": ex_dividend_date_gt,
-                        "ex_dividend_date.lte": ex_dividend_date_lte,
-                        "ex_dividend_date.lt": ex_dividend_date_lt,
-                        "record_date.gte": record_date_gte,
-                        "record_date.gt": record_date_gt,
-                        "record_date.lte": record_date_lte,
-                        "record_date.lt": record_date_lt,
-                        "declaration_date.gte": declaration_date_gte,
-                        "declaration_date.gt": declaration_date_gt,
-                        "declaration_date.lte": declaration_date_lte,
-                        "declaration_date.lt": declaration_date_lt,
-                        "pay_date.gte": pay_date_gte,
-                        "pay_date.gt": pay_date_gt,
-                        "pay_date.lte": pay_date_lte,
-                        "pay_date.lt": pay_date_lt,
-                        "cash_amount.gte": cash_amount_gte,
-                        "cash_amount.gt": cash_amount_gt,
-                        "cash_amount.lte": cash_amount_lte,
-                        "cash_amount.lt": cash_amount_lt,
-                    }.items()
-                    if v is not None
-                },
+        dividends_list = []
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "ticker.gte": ticker_gte,
+                    "ticker.gt": ticker_gt,
+                    "ticker.lte": ticker_lte,
+                    "ticker.lt": ticker_lt,
+                    "ex_dividend_date.gte": ex_dividend_date_gte,
+                    "ex_dividend_date.gt": ex_dividend_date_gt,
+                    "ex_dividend_date.lte": ex_dividend_date_lte,
+                    "ex_dividend_date.lt": ex_dividend_date_lt,
+                    "record_date.gte": record_date_gte,
+                    "record_date.gt": record_date_gt,
+                    "record_date.lte": record_date_lte,
+                    "record_date.lt": record_date_lt,
+                    "declaration_date.gte": declaration_date_gte,
+                    "declaration_date.gt": declaration_date_gt,
+                    "declaration_date.lte": declaration_date_lte,
+                    "declaration_date.lt": declaration_date_lt,
+                    "pay_date.gte": pay_date_gte,
+                    "pay_date.gt": pay_date_gt,
+                    "pay_date.lte": pay_date_lte,
+                    "pay_date.lt": pay_date_lt,
+                    "cash_amount.gte": cash_amount_gte,
+                    "cash_amount.gt": cash_amount_gt,
+                    "cash_amount.lte": cash_amount_lte,
+                    "cash_amount.lt": cash_amount_lt,
+                }.items()
+                if v is not None
             },
-            raw=True,
-        )
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_dividends(
+                ticker=ticker,
+                ex_dividend_date=ex_dividend_date,
+                record_date=record_date,
+                declaration_date=declaration_date,
+                pay_date=pay_date,
+                frequency=frequency,
+                cash_amount=cash_amount,
+                dividend_type=dividend_type,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=param_dict,
+                raw=False,
+            ):
+                dividends_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_dividends(
+                ticker=ticker,
+                ex_dividend_date=ex_dividend_date,
+                record_date=record_date,
+                declaration_date=declaration_date,
+                pay_date=pay_date,
+                frequency=frequency,
+                cash_amount=cash_amount,
+                dividend_type=dividend_type,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            dividends_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": dividends_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -203,6 +269,7 @@ async def list_dividends(
             params={
                 "ticker": ticker,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -264,6 +331,7 @@ async def list_ipos(
     listing_date_gte: Optional[Union[str, datetime, date]] = None,
     ipo_status: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
@@ -278,31 +346,76 @@ async def list_ipos(
     - listing_date: IPO listing date (YYYY-MM-DD)
     - listing_date_gte/lte: Date range filters
     - ipo_status: Status filter ("rumor", "pending", "new", "history", "direct_listing_process")
-    - limit: Number of results (default: 10, max: 1000)
+    - limit: Number of results per page (default: 10, max: 1000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_ipos(ipo_status="pending", limit=50)
-    Example: list_ipos(listing_date_gte="2024-01-01", listing_date_lte="2024-12-31")
+    RECOMMENDED: Always use fetch_all=True to cache complete IPO data locally for efficient DuckDB analysis.
+
+    Example: list_ipos(ipo_status="pending", fetch_all=True)
+    Example: list_ipos(listing_date_gte="2024-01-01", listing_date_lte="2024-12-31", fetch_all=True)
 
     Returns: ticker, issuer_name, listing_date, ipo_status, final_issue_price, offer prices, shares, total_offer_size.
     """
     try:
-        results = polygon_client.vx.list_ipos(
-            ticker=ticker,
-            us_code=us_code,
-            isin=isin,
-            listing_date=listing_date,
-            listing_date_lt=listing_date_lt,
-            listing_date_lte=listing_date_lte,
-            listing_date_gt=listing_date_gt,
-            listing_date_gte=listing_date_gte,
-            ipo_status=ipo_status,
-            limit=limit,
-            sort=sort,
-            order=order,
-            params=params,
-            raw=True,
-        )
+        ipos_list = []
 
-        return json_to_csv(results.data.decode("utf-8"))
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.vx.list_ipos(
+                ticker=ticker,
+                us_code=us_code,
+                isin=isin,
+                listing_date=listing_date,
+                listing_date_lt=listing_date_lt,
+                listing_date_lte=listing_date_lte,
+                listing_date_gt=listing_date_gt,
+                listing_date_gte=listing_date_gte,
+                ipo_status=ipo_status,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=False,
+            ):
+                ipos_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.vx.list_ipos(
+                ticker=ticker,
+                us_code=us_code,
+                isin=isin,
+                listing_date=listing_date,
+                listing_date_lt=listing_date_lt,
+                listing_date_lte=listing_date_lte,
+                listing_date_gt=listing_date_gt,
+                listing_date_gte=listing_date_gte,
+                ipo_status=ipo_status,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            ipos_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": ipos_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="list_ipos",
+            params={
+                "ipo_status": ipo_status,
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"

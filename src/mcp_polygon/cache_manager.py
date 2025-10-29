@@ -182,12 +182,30 @@ class CacheManager:
             return f"{ticker}/{param_str}"
 
         # Options
-        elif tool_name in ["list_options_contracts", "get_options_chain_snapshot"]:
+        elif tool_name in ["list_options_contracts", "list_snapshot_options_chain"]:
             underlying = params.get("underlying_ticker") or params.get(
                 "underlying_asset", "UNKNOWN"
             )
             expiration = params.get("expiration_date", "all")
             return f"{underlying}/{expiration}"
+
+        # Snapshots
+        elif tool_name == "list_universal_snapshots":
+            snapshot_type = params.get("type", "all")
+            ticker_any_of = params.get("ticker_any_of")
+            if ticker_any_of and len(ticker_any_of) <= 5:
+                # For small ticker lists, use them in partition key
+                ticker_str = "_".join(sorted(ticker_any_of))
+                return f"{snapshot_type}/{ticker_str}"
+            return f"{snapshot_type}/all"
+
+        elif tool_name == "get_snapshot_all":
+            market_type = params.get("market_type", "UNKNOWN")
+            tickers = params.get("tickers")
+            if tickers and len(tickers) <= 5:
+                ticker_str = "_".join(sorted(tickers))
+                return f"{market_type}/{ticker_str}"
+            return f"{market_type}/all"
 
         # Options aggregates
         elif tool_name in [
@@ -238,6 +256,22 @@ class CacheManager:
             date = datetime.now().strftime("%Y-%m-%d")
             return f"{ticker}/{date}"
 
+        # Index snapshots
+        elif tool_name == "get_snapshot_indices":
+            ticker_any_of = params.get("ticker_any_of")
+            if ticker_any_of and len(ticker_any_of) <= 5:
+                ticker_str = "_".join(sorted(ticker_any_of))
+                return ticker_str
+            return "all_indices"
+
+        # Market summaries
+        elif tool_name == "get_summaries":
+            ticker_any_of = params.get("ticker_any_of")
+            if ticker_any_of and len(ticker_any_of) <= 5:
+                ticker_str = "_".join(sorted(ticker_any_of))
+                return ticker_str
+            return "all_tickers"
+
         # Reference data (rarely changes)
         elif tool_name in ["get_exchanges", "get_ticker_types", "get_market_holidays"]:
             date = datetime.now().strftime("%Y-%m-%d")
@@ -257,6 +291,63 @@ class CacheManager:
             date = datetime.now().strftime("%Y-%m-%d")
             return f"{ticker}/{date}"
 
+        # Futures aggregates
+        elif tool_name == "list_futures_aggregates":
+            ticker = params.get("ticker", "UNKNOWN")
+            resolution = params.get("resolution", "day")
+            return f"{ticker}/{resolution}"
+
+        # Futures contracts
+        elif tool_name == "list_futures_contracts":
+            product_code = params.get("product_code", "all")
+            active = params.get("active", "all")
+            return f"{product_code}/{active}"
+
+        # Futures products
+        elif tool_name == "list_futures_products":
+            sector = params.get("sector", "all")
+            asset_class = params.get("asset_class", "all")
+            return f"{sector}/{asset_class}"
+
+        # Futures schedules
+        elif tool_name == "list_futures_schedules":
+            session_date = params.get("session_end_date", datetime.now().strftime("%Y-%m-%d"))
+            trading_venue = params.get("trading_venue", "all")
+            return f"{session_date}/{trading_venue}"
+
+        # Futures schedules by product
+        elif tool_name == "list_futures_schedules_by_product_code":
+            product_code = params.get("product_code", "UNKNOWN")
+            return product_code
+
+        # Futures market statuses
+        elif tool_name == "list_futures_market_statuses":
+            product_code = params.get("product_code", "all")
+            return product_code
+
+        # Stock financials
+        elif tool_name == "list_stock_financials":
+            ticker = params.get("ticker", "UNKNOWN")
+            timeframe = params.get("timeframe", "all")
+            return f"{ticker}/{timeframe}"
+
+        # Short interest
+        elif tool_name == "list_short_interest":
+            ticker = params.get("ticker", "all")
+            return ticker
+
+        # Short volume
+        elif tool_name == "list_short_volume":
+            ticker = params.get("ticker", "all")
+            date_gte = params.get("date_gte")
+            if date_gte:
+                try:
+                    dt = datetime.strptime(str(date_gte)[:10], "%Y-%m-%d")
+                    return f"{ticker}/{dt.year}-{dt.month:02d}"
+                except ValueError:
+                    pass
+            return ticker
+
         # Default: hash of parameters
         else:
             param_str = json.dumps(params, sort_keys=True)
@@ -273,12 +364,24 @@ class CacheManager:
             True if caching is beneficial, False to return directly.
         """
 
-        # Rule 1: Never cache real-time/volatile data
+        # Rule 1: Never cache real-time/volatile data (except indices/summaries for specific tickers)
         if tool_name in [
             "get_snapshot_ticker",
-            "list_universal_snapshots",
             "get_market_status",
         ]:
+            return False
+
+        # Index snapshots and summaries: cache only if specific tickers requested
+        if tool_name in ["get_snapshot_indices", "get_summaries"]:
+            ticker_any_of = params.get("ticker_any_of")
+            if ticker_any_of and len(ticker_any_of) > 0:
+                return True  # Cache specific ticker requests
+            return False  # Don't cache "all" requests (too volatile)
+
+        # Universal snapshots: cache only with fetch_all
+        if tool_name == "list_universal_snapshots":
+            if params.get("fetch_all"):
+                return True
             return False
 
         # Rule 2: Always cache reference data (changes rarely)
@@ -299,14 +402,14 @@ class CacheManager:
         if tool_name in ["get_grouped_daily_aggs", "get_snapshot_all"]:
             return True
 
-        # Time-series with large limits
+        # Time-series with large limits or fetch_all
         if tool_name in ["get_aggs", "list_aggs"]:
-            if params.get("limit", 0) > 1000:
+            if params.get("fetch_all") or params.get("limit", 0) > 1000:
                 return True
 
         # Full ticker listings
         if tool_name in ["list_tickers", "get_all_tickers"]:
-            if params.get("limit", 0) > 500:
+            if params.get("fetch_all") or params.get("limit", 0) > 500:
                 return True
 
         # Multi-quarter financials
@@ -316,17 +419,72 @@ class CacheManager:
 
         # Large news queries
         if tool_name == "list_ticker_news":
-            if params.get("limit", 0) > 50:
+            if params.get("fetch_all") or params.get("limit", 0) > 50:
                 return True
 
-        # Full options chains (no filters)
-        if tool_name in ["list_options_contracts", "get_options_chain_snapshot"]:
-            if not params.get("strike_price") and not params.get("expiration_date"):
+        # Full options chains (no filters or fetch_all enabled)
+        if tool_name in ["list_options_contracts", "list_snapshot_options_chain"]:
+            if params.get("fetch_all") or (
+                not params.get("strike_price") and not params.get("expiration_date")
+            ):
                 return True
 
-        # Technical indicators with large windows
+        # Options aggregates with fetch_all
+        if tool_name == "get_options_aggs":
+            if params.get("fetch_all"):
+                return True
+
+        # Technical indicators with large windows or fetch_all
         if tool_name in ["get_sma", "get_ema", "get_rsi", "get_macd"]:
-            if params.get("limit", 0) > 100:
+            if params.get("fetch_all") or params.get("limit", 0) > 100:
+                return True
+
+        # Snapshot tools with fetch_all or large datasets
+        if tool_name == "list_universal_snapshots":
+            if params.get("fetch_all"):
+                return True
+
+        if tool_name == "get_snapshot_all":
+            # Always cache full market snapshots - they're huge
+            return True
+
+        # Futures tools with fetch_all or large datasets
+        if tool_name in [
+            "list_futures_aggregates",
+            "list_futures_contracts",
+            "list_futures_products",
+            "list_futures_schedules",
+            "list_futures_schedules_by_product_code",
+            "list_futures_market_statuses",
+        ]:
+            if params.get("fetch_all") or params.get("limit", 0) > 100:
+                return True
+
+        # Financial tools with fetch_all or large datasets
+        if tool_name in [
+            "list_stock_financials",
+            "list_short_interest",
+            "list_short_volume",
+        ]:
+            if params.get("fetch_all") or params.get("limit", 0) > 50:
+                return True
+
+        # Economics tools with fetch_all or large datasets
+        if tool_name in [
+            "list_treasury_yields",
+            "list_inflation",
+            "list_inflation_expectations",
+        ]:
+            if params.get("fetch_all") or params.get("limit", 0) > 100:
+                return True
+
+        # Corporate actions tools with fetch_all or large datasets
+        if tool_name in [
+            "list_splits",
+            "list_dividends",
+            "list_ipos",
+        ]:
+            if params.get("fetch_all") or params.get("limit", 0) > 50:
                 return True
 
         # Rule 5: Default to direct return for small, one-off queries

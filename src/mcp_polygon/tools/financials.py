@@ -28,6 +28,7 @@ async def list_stock_financials(
     timeframe: Optional[str] = None,
     include_sources: Optional[bool] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     order: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
@@ -41,52 +42,98 @@ async def list_stock_financials(
     Parameters:
     - ticker: Filter by ticker symbol (e.g., "AAPL", "MSFT")
     - cik: Filter by SEC Central Index Key (CIK)
-    - company_name: Filter by exact company name
-    - company_name_search: Search by partial company name
-    - sic: Filter by Standard Industrial Classification (SIC) code
-    - filing_date: Filter by exact filing date (YYYY-MM-DD)
-    - filing_date_lt/lte/gt/gte: Range filters for filing date
-    - period_of_report_date: Filter by exact period end date
-    - period_of_report_date_lt/lte/gt/gte: Range filters for period end date
     - timeframe: Filter by timeframe (annual, quarterly, ttm)
-    - include_sources: Include source URLs for the data
-    - limit: Number of results to return (default: 10)
-    - sort/order: Sorting options
+    - filing_date_gte/lte: Range filters for filing date
+    - period_of_report_date_gte/lte: Range filters for period end date
+    - limit: Number of results per page (default: 10)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_stock_financials(ticker="AAPL") returns Apple's financial statements
-    Example: list_stock_financials(ticker="MSFT", timeframe="annual") returns annual financials
-    Example: list_stock_financials(ticker="GOOGL", limit=4) returns 4 most recent filings
+    RECOMMENDED: Always use fetch_all=True to cache complete financial data locally for efficient DuckDB analysis.
 
-    Note: Returns balance sheet (assets, liabilities, equity), income statement (revenue, expenses, profit),
+    Example: list_stock_financials(ticker="AAPL", fetch_all=True)
+    Example: list_stock_financials(ticker="MSFT", timeframe="annual", fetch_all=True)
+
+    Returns: Balance sheet (assets, liabilities, equity), income statement (revenue, expenses, profit),
     and cash flow statement (operating, investing, financing activities) data from SEC filings.
     """
     try:
-        results = polygon_client.vx.list_stock_financials(
-            ticker=ticker,
-            cik=cik,
-            company_name=company_name,
-            company_name_search=company_name_search,
-            sic=sic,
-            filing_date=filing_date,
-            filing_date_lt=filing_date_lt,
-            filing_date_lte=filing_date_lte,
-            filing_date_gt=filing_date_gt,
-            filing_date_gte=filing_date_gte,
-            period_of_report_date=period_of_report_date,
-            period_of_report_date_lt=period_of_report_date_lt,
-            period_of_report_date_lte=period_of_report_date_lte,
-            period_of_report_date_gt=period_of_report_date_gt,
-            period_of_report_date_gte=period_of_report_date_gte,
-            timeframe=timeframe,
-            include_sources=include_sources,
-            limit=limit,
-            sort=sort,
-            order=order,
-            params=params,
-            raw=True,
-        )
+        financials_list = []
 
-        return json_to_csv(results.data.decode("utf-8"))
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for financial in polygon_client.vx.list_stock_financials(
+                ticker=ticker,
+                cik=cik,
+                company_name=company_name,
+                company_name_search=company_name_search,
+                sic=sic,
+                filing_date=filing_date,
+                filing_date_lt=filing_date_lt,
+                filing_date_lte=filing_date_lte,
+                filing_date_gt=filing_date_gt,
+                filing_date_gte=filing_date_gte,
+                period_of_report_date=period_of_report_date,
+                period_of_report_date_lt=period_of_report_date_lt,
+                period_of_report_date_lte=period_of_report_date_lte,
+                period_of_report_date_gt=period_of_report_date_gt,
+                period_of_report_date_gte=period_of_report_date_gte,
+                timeframe=timeframe,
+                include_sources=include_sources,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=False,
+            ):
+                financials_list.append(financial.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.vx.list_stock_financials(
+                ticker=ticker,
+                cik=cik,
+                company_name=company_name,
+                company_name_search=company_name_search,
+                sic=sic,
+                filing_date=filing_date,
+                filing_date_lt=filing_date_lt,
+                filing_date_lte=filing_date_lte,
+                filing_date_gt=filing_date_gt,
+                filing_date_gte=filing_date_gte,
+                period_of_report_date=period_of_report_date,
+                period_of_report_date_lt=period_of_report_date_lt,
+                period_of_report_date_lte=period_of_report_date_lte,
+                period_of_report_date_gt=period_of_report_date_gt,
+                period_of_report_date_gte=period_of_report_date_gte,
+                timeframe=timeframe,
+                include_sources=include_sources,
+                limit=limit,
+                sort=sort,
+                order=order,
+                params=params,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            financials_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": financials_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="list_stock_financials",
+            params={
+                "ticker": ticker,
+                "timeframe": timeframe,
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -871,6 +918,7 @@ async def list_short_interest(
     avg_daily_volume_lt: Optional[int] = None,
     avg_daily_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -884,55 +932,86 @@ async def list_short_interest(
     - days_to_cover_gt: Days to cover threshold (5-7+ indicates high squeeze risk)
     - settlement_date_gte/lte: Settlement date range (YYYY-MM-DD)
     - avg_daily_volume_lt: Volume filter for liquidity screening
-    - limit: Number of results (default: 10, max: 50000)
+    - limit: Number of results per page (default: 10, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_short_interest(ticker="GME", limit=20)
-    Example: list_short_interest(days_to_cover_gt=5, settlement_date_gte="2025-01-01")
+    RECOMMENDED: Always use fetch_all=True to cache complete short interest data locally for efficient DuckDB analysis.
+
+    Example: list_short_interest(ticker="GME", fetch_all=True)
+    Example: list_short_interest(days_to_cover_gt=5, settlement_date_gte="2025-01-01", fetch_all=True)
 
     Returns: short_interest, days_to_cover, avg_daily_volume, settlement_date. Formula: days_to_cover = short_interest ÷ avg_daily_volume. Bi-monthly FINRA snapshots.
     """
     try:
-        results = polygon_client.list_short_interest(
-            ticker=ticker,
-            settlement_date=settlement_date,
-            settlement_date_lt=settlement_date_lt,
-            settlement_date_lte=settlement_date_lte,
-            settlement_date_gt=settlement_date_gt,
-            settlement_date_gte=settlement_date_gte,
-            limit=limit,
-            sort=sort,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "days_to_cover": days_to_cover,
-                        "avg_daily_volume": avg_daily_volume,
-                        "ticker.any_of": ticker_any_of,
-                        "ticker.gt": ticker_gt,
-                        "ticker.gte": ticker_gte,
-                        "ticker.lt": ticker_lt,
-                        "ticker.lte": ticker_lte,
-                        "days_to_cover.any_of": days_to_cover_any_of,
-                        "days_to_cover.gt": days_to_cover_gt,
-                        "days_to_cover.gte": days_to_cover_gte,
-                        "days_to_cover.lt": days_to_cover_lt,
-                        "days_to_cover.lte": days_to_cover_lte,
-                        "settlement_date.any_of": settlement_date_any_of,
-                        "avg_daily_volume.any_of": avg_daily_volume_any_of,
-                        "avg_daily_volume.gt": avg_daily_volume_gt,
-                        "avg_daily_volume.gte": avg_daily_volume_gte,
-                        "avg_daily_volume.lt": avg_daily_volume_lt,
-                        "avg_daily_volume.lte": avg_daily_volume_lte,
-                    }.items()
-                    if v is not None
-                },
+        short_interest_list = []
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "days_to_cover": days_to_cover,
+                    "avg_daily_volume": avg_daily_volume,
+                    "ticker.any_of": ticker_any_of,
+                    "ticker.gt": ticker_gt,
+                    "ticker.gte": ticker_gte,
+                    "ticker.lt": ticker_lt,
+                    "ticker.lte": ticker_lte,
+                    "days_to_cover.any_of": days_to_cover_any_of,
+                    "days_to_cover.gt": days_to_cover_gt,
+                    "days_to_cover.gte": days_to_cover_gte,
+                    "days_to_cover.lt": days_to_cover_lt,
+                    "days_to_cover.lte": days_to_cover_lte,
+                    "settlement_date.any_of": settlement_date_any_of,
+                    "avg_daily_volume.any_of": avg_daily_volume_any_of,
+                    "avg_daily_volume.gt": avg_daily_volume_gt,
+                    "avg_daily_volume.gte": avg_daily_volume_gte,
+                    "avg_daily_volume.lt": avg_daily_volume_lt,
+                    "avg_daily_volume.lte": avg_daily_volume_lte,
+                }.items()
+                if v is not None
             },
-            raw=True,
-        )
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_short_interest(
+                ticker=ticker,
+                settlement_date=settlement_date,
+                settlement_date_lt=settlement_date_lt,
+                settlement_date_lte=settlement_date_lte,
+                settlement_date_gt=settlement_date_gt,
+                settlement_date_gte=settlement_date_gte,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=False,
+            ):
+                short_interest_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_short_interest(
+                ticker=ticker,
+                settlement_date=settlement_date,
+                settlement_date_lt=settlement_date_lt,
+                settlement_date_lte=settlement_date_lte,
+                settlement_date_gt=settlement_date_gt,
+                settlement_date_gte=settlement_date_gte,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            short_interest_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": short_interest_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -940,6 +1019,7 @@ async def list_short_interest(
             params={
                 "ticker": ticker,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )
@@ -974,6 +1054,7 @@ async def list_short_volume(
     total_volume_lt: Optional[int] = None,
     total_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -987,55 +1068,86 @@ async def list_short_volume(
     - date_gte/lte: Date range (YYYY-MM-DD)
     - short_volume_ratio_gt: Short volume ratio threshold (>50% is high bearish pressure)
     - total_volume_gt: Volume filter
-    - limit: Number of results (default: 10, max: 50000)
+    - limit: Number of results per page (default: 10, max: 50000)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_short_volume(ticker="TSLA", date_gte="2025-03-01", limit=30)
-    Example: list_short_volume(short_volume_ratio_gt=50, date_gte="2025-01-01")
+    RECOMMENDED: Always use fetch_all=True to cache complete short volume data locally for efficient DuckDB analysis.
+
+    Example: list_short_volume(ticker="TSLA", date_gte="2025-03-01", fetch_all=True)
+    Example: list_short_volume(short_volume_ratio_gt=50, date_gte="2025-01-01", fetch_all=True)
 
     Returns: short_volume, total_volume, short_volume_ratio, date. Formula: short_volume_ratio = (short_volume / total_volume) × 100. Daily FINRA transactions (T+1).
     """
     try:
-        results = polygon_client.list_short_volume(
-            ticker=ticker,
-            date=date,
-            date_lt=date_lt,
-            date_lte=date_lte,
-            date_gt=date_gt,
-            date_gte=date_gte,
-            limit=limit,
-            sort=sort,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "short_volume_ratio": short_volume_ratio,
-                        "total_volume": total_volume,
-                        "ticker.any_of": ticker_any_of,
-                        "ticker.gt": ticker_gt,
-                        "ticker.gte": ticker_gte,
-                        "ticker.lt": ticker_lt,
-                        "ticker.lte": ticker_lte,
-                        "date.any_of": date_any_of,
-                        "short_volume_ratio.any_of": short_volume_ratio_any_of,
-                        "short_volume_ratio.gt": short_volume_ratio_gt,
-                        "short_volume_ratio.gte": short_volume_ratio_gte,
-                        "short_volume_ratio.lt": short_volume_ratio_lt,
-                        "short_volume_ratio.lte": short_volume_ratio_lte,
-                        "total_volume.any_of": total_volume_any_of,
-                        "total_volume.gt": total_volume_gt,
-                        "total_volume.gte": total_volume_gte,
-                        "total_volume.lt": total_volume_lt,
-                        "total_volume.lte": total_volume_lte,
-                    }.items()
-                    if v is not None
-                },
+        short_volume_list = []
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "short_volume_ratio": short_volume_ratio,
+                    "total_volume": total_volume,
+                    "ticker.any_of": ticker_any_of,
+                    "ticker.gt": ticker_gt,
+                    "ticker.gte": ticker_gte,
+                    "ticker.lt": ticker_lt,
+                    "ticker.lte": ticker_lte,
+                    "date.any_of": date_any_of,
+                    "short_volume_ratio.any_of": short_volume_ratio_any_of,
+                    "short_volume_ratio.gt": short_volume_ratio_gt,
+                    "short_volume_ratio.gte": short_volume_ratio_gte,
+                    "short_volume_ratio.lt": short_volume_ratio_lt,
+                    "short_volume_ratio.lte": short_volume_ratio_lte,
+                    "total_volume.any_of": total_volume_any_of,
+                    "total_volume.gt": total_volume_gt,
+                    "total_volume.gte": total_volume_gte,
+                    "total_volume.lt": total_volume_lt,
+                    "total_volume.lte": total_volume_lte,
+                }.items()
+                if v is not None
             },
-            raw=True,
-        )
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for item in polygon_client.list_short_volume(
+                ticker=ticker,
+                date=date,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=False,
+            ):
+                short_volume_list.append(item.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_short_volume(
+                ticker=ticker,
+                date=date,
+                date_lt=date_lt,
+                date_lte=date_lte,
+                date_gt=date_gt,
+                date_gte=date_gte,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            short_volume_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": short_volume_list, "status": "OK"}
 
         # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(data)
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -1043,6 +1155,7 @@ async def list_short_volume(
             params={
                 "ticker": ticker,
                 "limit": limit,
+                "fetch_all": fetch_all,
             },
             csv_data=csv_data,
         )

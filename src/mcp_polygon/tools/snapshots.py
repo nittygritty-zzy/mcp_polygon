@@ -4,6 +4,7 @@ from typing import Optional, Any, Dict, List
 from mcp.types import ToolAnnotations
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
+from ..tool_integration import process_tool_response
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -17,6 +18,7 @@ async def list_universal_snapshots(
     ticker_lt: Optional[str] = None,
     order: Optional[str] = None,
     limit: Optional[int] = 10,
+    fetch_all: Optional[bool] = True,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -29,38 +31,80 @@ async def list_universal_snapshots(
     - type: Asset type ("stocks", "options", "forex", "crypto", "indices")
     - ticker_any_of: List of specific tickers (up to 250, e.g., ["AAPL", "TSLA"])
     - ticker_gte/lt: Ticker range filters
-    - limit: Number of results (default: 10, max: 250)
+    - limit: Number of results per page (default: 10, max: 250)
+    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
 
-    Example: list_universal_snapshots(type="stocks", ticker_any_of=["AAPL", "MSFT", "GOOGL"])
-    Example: list_universal_snapshots(ticker_any_of=["AAPL", "O:NCLH221014C00005000", "X:BTCUSD"])
+    RECOMMENDED: Always use fetch_all=True to cache complete snapshot data locally for efficient DuckDB analysis.
+
+    Example: list_universal_snapshots(type="stocks", ticker_any_of=["AAPL", "MSFT", "GOOGL"], fetch_all=True)
+    Example: list_universal_snapshots(ticker_any_of=["AAPL", "O:NCLH221014C00005000", "X:BTCUSD"], fetch_all=True)
 
     Returns: ticker, type, market_status, last_trade, last_quote. Stocks include session data, options include greeks/IV.
     """
     try:
-        results = polygon_client.list_universal_snapshots(
-            type=type,
-            ticker_any_of=ticker_any_of,
-            order=order,
-            limit=limit,
-            sort=sort,
-            params={
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "ticker": ticker,
-                        "ticker.gte": ticker_gte,
-                        "ticker.gt": ticker_gt,
-                        "ticker.lte": ticker_lte,
-                        "ticker.lt": ticker_lt,
-                    }.items()
-                    if v is not None
-                },
-            },
-            raw=True,
-        )
+        snapshots_list = []
 
-        return json_to_csv(results.data.decode("utf-8"))
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "ticker": ticker,
+                    "ticker.gte": ticker_gte,
+                    "ticker.gt": ticker_gt,
+                    "ticker.lte": ticker_lte,
+                    "ticker.lt": ticker_lt,
+                }.items()
+                if v is not None
+            },
+        }
+
+        if fetch_all:
+            # Use iterator approach for automatic pagination
+            for snapshot in polygon_client.list_universal_snapshots(
+                type=type,
+                ticker_any_of=ticker_any_of,
+                order=order,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=False,
+            ):
+                # Convert UniversalSnapshot object to dict
+                snapshots_list.append(snapshot.to_dict())
+        else:
+            # Single page approach
+            results = polygon_client.list_universal_snapshots(
+                type=type,
+                ticker_any_of=ticker_any_of,
+                order=order,
+                limit=limit,
+                sort=sort,
+                params=param_dict,
+                raw=True,
+            )
+
+            import json
+            data = json.loads(results.data.decode("utf-8"))
+            snapshots_list = data.get("results", [])
+
+        # Create data structure for JSON to CSV conversion
+        data = {"results": snapshots_list, "status": "OK"}
+
+        # Convert to CSV
+        csv_data = json_to_csv(data)
+
+        # Process with intelligent caching
+        return await process_tool_response(
+            tool_name="list_universal_snapshots",
+            params={
+                "type": type,
+                "ticker_any_of": ticker_any_of,
+                "limit": limit,
+                "fetch_all": fetch_all,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -73,7 +117,7 @@ async def get_snapshot_all(
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Get full market snapshot for 10,000+ tickers in a single response.
+    Get full market snapshot for 10,000+ tickers in a single response. Auto-cached to disk for DuckDB queries.
 
     Reference: https://polygon.io/docs/rest/stocks/snapshots/full-market-snapshot
 
@@ -81,6 +125,8 @@ async def get_snapshot_all(
     - market_type: Market type ("stocks", "crypto", "fx", "otc", "indices")
     - tickers: Optional list to filter specific tickers (e.g., ["AAPL", "TSLA"])
     - include_otc: Include OTC securities (default: False)
+
+    RECOMMENDED: Use this tool for full market analysis - data is automatically cached locally for efficient DuckDB queries.
 
     Example: get_snapshot_all("stocks")
     Example: get_snapshot_all("stocks", tickers=["AAPL", "MSFT", "GOOGL"])
@@ -96,7 +142,18 @@ async def get_snapshot_all(
             raw=True,
         )
 
-        return json_to_csv(results.data.decode("utf-8"))
+        csv_data = json_to_csv(results.data.decode("utf-8"))
+
+        # Process with intelligent caching - this is a large dataset
+        return await process_tool_response(
+            tool_name="get_snapshot_all",
+            params={
+                "market_type": market_type,
+                "tickers": tickers,
+                "include_otc": include_otc,
+            },
+            csv_data=csv_data,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -226,6 +283,85 @@ async def get_snapshot_crypto_book(
     try:
         results = polygon_client.get_snapshot_crypto_book(
             ticker=ticker, params=params, raw=True
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_snapshot_indices(
+    ticker_any_of: Optional[List[str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get current values for major market indices (S&P 500, NASDAQ, Dow Jones, etc.).
+
+    Reference: https://polygon.io/docs/stocks/get_v3_snapshot_indices
+
+    Parameters:
+    - ticker_any_of: List of index tickers (e.g., ["I:SPX", "I:NDX", "I:DJI"])
+    - params: Additional query parameters
+
+    Common Index Tickers:
+    - I:SPX - S&P 500
+    - I:NDX - NASDAQ 100
+    - I:DJI - Dow Jones Industrial Average
+    - I:RUT - Russell 2000
+    - I:VIX - CBOE Volatility Index
+
+    Example: get_snapshot_indices(ticker_any_of=["I:SPX", "I:NDX", "I:DJI"])
+    Example: get_snapshot_indices()  # All available indices
+
+    Returns: ticker, value, session (open, high, low, close), previous_session. Real-time or delayed index values.
+    """
+    try:
+        # Convert single string to list if needed
+        if isinstance(ticker_any_of, str):
+            ticker_any_of = [ticker_any_of]
+
+        results = polygon_client.get_snapshot_indices(
+            ticker_any_of=ticker_any_of,
+            params=params,
+            raw=True,
+        )
+
+        return json_to_csv(results.data.decode("utf-8"))
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_summaries(
+    ticker_any_of: Optional[List[str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Get comprehensive market summaries with OHLC, volume, VWAP, and intraday data for multiple tickers.
+
+    Reference: https://polygon.io/docs/stocks/get_v1_summaries
+
+    Parameters:
+    - ticker_any_of: List of tickers (e.g., ["AAPL", "MSFT", "GOOGL"])
+    - params: Additional query parameters
+
+    Example: get_summaries(ticker_any_of=["AAPL", "MSFT", "TSLA"])
+    Example: get_summaries()  # All available tickers (large dataset)
+
+    Returns: ticker, session (OHLC, volume, VWAP), previous_session, price (today's change/%), type, market_status.
+
+    Note: Similar to snapshots but with more detailed session breakdown and aggregate data.
+    """
+    try:
+        # Convert single string to list if needed
+        if isinstance(ticker_any_of, str):
+            ticker_any_of = [ticker_any_of]
+
+        results = polygon_client.get_summaries(
+            ticker_any_of=ticker_any_of,
+            params=params,
+            raw=True,
         )
 
         return json_to_csv(results.data.decode("utf-8"))
