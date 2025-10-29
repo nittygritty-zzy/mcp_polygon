@@ -5,11 +5,12 @@ from mcp.types import ToolAnnotations
 from ..clients import poly_mcp
 from ..tool_integration import process_tool_response
 import requests
+import os
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_earnings_calendar_alpha_vantage(
-    alpha_vantage_api_key: str,
+    alpha_vantage_api_key: Optional[str] = None,
     horizon: str = "3month",
     symbol: Optional[str] = None,
 ) -> str:
@@ -19,14 +20,14 @@ async def get_earnings_calendar_alpha_vantage(
     This endpoint provides earnings forecasts for up to 12 months, including analyst
     EPS estimates and reporting dates. Data is returned in CSV format.
 
-    **IMPORTANT**: You must provide your Alpha Vantage API key to use this tool.
+    **IMPORTANT**: This tool requires an Alpha Vantage API key.
     Get a free key at: https://www.alphavantage.co/support/#api-key
 
     Parameters
     ----------
-    alpha_vantage_api_key : str, required
-        Your Alpha Vantage API key. This is REQUIRED for the tool to work.
-        Get a free key at: https://www.alphavantage.co/support/#api-key
+    alpha_vantage_api_key : str, optional
+        Your Alpha Vantage API key. If not provided, will use ALPHA_VANTAGE_API_KEY
+        environment variable. Get a free key at: https://www.alphavantage.co/support/#api-key
 
     horizon : str, optional
         Time horizon for earnings calendar (default: "3month")
@@ -81,12 +82,22 @@ async def get_earnings_calendar_alpha_vantage(
     https://www.alphavantage.co/documentation/#earnings-calendar
     """
     try:
+        # Get API key from parameter or environment variable
+        api_key = alpha_vantage_api_key or os.getenv("ALPHA_VANTAGE_API_KEY")
+
+        if not api_key:
+            return (
+                "Error: Alpha Vantage API key is required. "
+                "Either pass alpha_vantage_api_key parameter or set ALPHA_VANTAGE_API_KEY environment variable. "
+                "Get a free key at: https://www.alphavantage.co/support/#api-key"
+            )
+
         # Build API request
         url = "https://www.alphavantage.co/query"
         params = {
             "function": "EARNINGS_CALENDAR",
             "horizon": horizon,
-            "apikey": alpha_vantage_api_key,
+            "apikey": api_key,
         }
 
         # Add optional symbol filter
