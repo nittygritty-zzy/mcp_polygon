@@ -89,9 +89,10 @@ async def get_sma(
         if "results" in data and "values" in data["results"]:
             # Wrap the values in a results key for consistent CSV formatting
             formatted_data = {"results": data["results"]["values"]}
-            return json_to_csv(formatted_data)
-        # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+            csv_data = json_to_csv(formatted_data)
+        else:
+            # Convert to CSV
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -190,9 +191,10 @@ async def get_ema(
         if "results" in data and "values" in data["results"]:
             # Wrap the values in a results key for consistent CSV formatting
             formatted_data = {"results": data["results"]["values"]}
-            return json_to_csv(formatted_data)
-        # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+            csv_data = json_to_csv(formatted_data)
+        else:
+            # Convert to CSV
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -296,9 +298,10 @@ async def get_macd(
         if "results" in data and "values" in data["results"]:
             # Wrap the values in a results key for consistent CSV formatting
             formatted_data = {"results": data["results"]["values"]}
-            return json_to_csv(formatted_data)
-        # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+            csv_data = json_to_csv(formatted_data)
+        else:
+            # Convert to CSV
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -395,9 +398,10 @@ async def get_rsi(
         if "results" in data and "values" in data["results"]:
             # Wrap the values in a results key for consistent CSV formatting
             formatted_data = {"results": data["results"]["values"]}
-            return json_to_csv(formatted_data)
-        # Convert to CSV
-        csv_data = json_to_csv(results.data.decode("utf-8"))
+            csv_data = json_to_csv(formatted_data)
+        else:
+            # Convert to CSV
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
         # Process with intelligent caching
         return await process_tool_response(
