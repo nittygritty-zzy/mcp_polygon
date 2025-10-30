@@ -63,7 +63,7 @@ async def get_aggs(
                 params=params,
                 raw=False,
             ):
-                aggs_list.append(item.to_dict())
+                aggs_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.get_aggs(
@@ -153,7 +153,7 @@ async def list_aggs(
                 params=params,
                 raw=False,
             ):
-                aggs_list.append(item.to_dict())
+                aggs_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_aggs(

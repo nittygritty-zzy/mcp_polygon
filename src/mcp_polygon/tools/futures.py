@@ -53,7 +53,7 @@ async def list_futures_aggregates(
                 params=params,
                 raw=False,
             ):
-                aggregates_list.append(agg.to_dict())
+                aggregates_list.append(vars(agg))
         else:
             # Single page approach
             results = polygon_client.list_futures_aggregates(
@@ -138,7 +138,7 @@ async def list_futures_contracts(
                 params=params,
                 raw=False,
             ):
-                contracts_list.append(contract.to_dict())
+                contracts_list.append(vars(contract))
         else:
             # Single page approach
             results = polygon_client.list_futures_contracts(
@@ -251,7 +251,7 @@ async def list_futures_products(
                 params=params,
                 raw=False,
             ):
-                products_list.append(product.to_dict())
+                products_list.append(vars(product))
         else:
             # Single page approach
             results = polygon_client.list_futures_products(
@@ -357,7 +357,7 @@ async def list_futures_schedules(
                 params=params,
                 raw=False,
             ):
-                schedules_list.append(schedule.to_dict())
+                schedules_list.append(vars(schedule))
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules(
@@ -437,7 +437,7 @@ async def list_futures_schedules_by_product_code(
                 params=params,
                 raw=False,
             ):
-                schedules_list.append(schedule.to_dict())
+                schedules_list.append(vars(schedule))
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules_by_product_code(
@@ -512,7 +512,7 @@ async def list_futures_market_statuses(
                 params=params,
                 raw=False,
             ):
-                statuses_list.append(status.to_dict())
+                statuses_list.append(vars(status))
         else:
             # Single page approach
             results = polygon_client.list_futures_market_statuses(

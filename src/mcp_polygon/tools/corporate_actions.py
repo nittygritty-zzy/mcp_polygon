@@ -80,7 +80,7 @@ async def list_splits(
                 params=param_dict,
                 raw=False,
             ):
-                splits_list.append(item.to_dict())
+                splits_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_splits(
@@ -234,7 +234,7 @@ async def list_dividends(
                 params=param_dict,
                 raw=False,
             ):
-                dividends_list.append(item.to_dict())
+                dividends_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_dividends(
@@ -377,7 +377,7 @@ async def list_ipos(
                 params=params,
                 raw=False,
             ):
-                ipos_list.append(item.to_dict())
+                ipos_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.vx.list_ipos(

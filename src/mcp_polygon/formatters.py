@@ -4,6 +4,43 @@ import io
 from typing import Any, Dict, List, Optional
 
 
+def deep_vars(obj: Any) -> Any:
+    """
+    Recursively convert @modelclass objects to dictionaries.
+
+    Handles:
+    - Objects with __dict__ attribute (converts via vars())
+    - Nested objects within dicts
+    - Lists containing objects
+    - Primitive types (returned as-is)
+
+    Args:
+        obj: Object to convert (can be @modelclass object, dict, list, or primitive)
+
+    Returns:
+        Fully converted structure with all nested objects as dicts
+    """
+    # Handle None and primitives
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # Handle lists
+    if isinstance(obj, list):
+        return [deep_vars(item) for item in obj]
+
+    # Handle dicts
+    if isinstance(obj, dict):
+        return {key: deep_vars(value) for key, value in obj.items()}
+
+    # Handle objects with __dict__ (like @modelclass objects)
+    if hasattr(obj, '__dict__'):
+        obj_dict = vars(obj)
+        return {key: deep_vars(value) for key, value in obj_dict.items()}
+
+    # Fallback for other types - convert to string
+    return str(obj)
+
+
 def json_to_csv(json_input: str | dict) -> str:
     """
     Convert JSON to flattened CSV format.

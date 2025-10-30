@@ -56,7 +56,7 @@ async def list_treasury_yields(
                 params=params,
                 raw=False,
             ):
-                yields_list.append(item.to_dict())
+                yields_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_treasury_yields(
@@ -143,7 +143,7 @@ async def list_inflation(
                 params=params,
                 raw=False,
             ):
-                inflation_list.append(item.to_dict())
+                inflation_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_inflation(

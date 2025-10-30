@@ -80,7 +80,7 @@ async def list_ticker_news(
                 raw=False,
             ):
                 # Convert TickerNews object to dict
-                news_list.append(news_item.to_dict())
+                news_list.append(vars(news_item))
         else:
             # Single page approach
             results = polygon_client.list_ticker_news(

@@ -71,7 +71,7 @@ async def list_universal_snapshots(
                 raw=False,
             ):
                 # Convert UniversalSnapshot object to dict
-                snapshots_list.append(snapshot.to_dict())
+                snapshots_list.append(vars(snapshot))
         else:
             # Single page approach
             results = polygon_client.list_universal_snapshots(

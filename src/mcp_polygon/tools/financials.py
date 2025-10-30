@@ -85,7 +85,7 @@ async def list_stock_financials(
                 params=params,
                 raw=False,
             ):
-                financials_list.append(financial.to_dict())
+                financials_list.append(vars(financial))
         else:
             # Single page approach
             results = polygon_client.vx.list_stock_financials(
@@ -987,7 +987,7 @@ async def list_short_interest(
                 params=param_dict,
                 raw=False,
             ):
-                short_interest_list.append(item.to_dict())
+                short_interest_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_short_interest(
@@ -1123,7 +1123,7 @@ async def list_short_volume(
                 params=param_dict,
                 raw=False,
             ):
-                short_volume_list.append(item.to_dict())
+                short_volume_list.append(vars(item))
         else:
             # Single page approach
             results = polygon_client.list_short_volume(

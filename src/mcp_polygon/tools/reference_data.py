@@ -139,7 +139,7 @@ async def list_tickers(
                 raw=False,
             ):
                 # Convert Ticker object to dict
-                tickers_list.append(ticker_obj.to_dict())
+                tickers_list.append(vars(ticker_obj))
         else:
             # Single page approach
             results = polygon_client.list_tickers(
@@ -227,7 +227,7 @@ async def get_all_tickers(
                 raw=False,
             ):
                 # Convert Ticker object to dict
-                tickers_list.append(ticker_obj.to_dict())
+                tickers_list.append(vars(ticker_obj))
         else:
             # Single page approach
             results = polygon_client.list_tickers(

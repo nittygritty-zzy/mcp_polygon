@@ -468,8 +468,8 @@ async def test_get_options_contract():
 
 @pytest.mark.asyncio
 async def test_get_options_chain_snapshot():
-    """Test get_options_chain_snapshot."""
-    result = await options.get_options_chain_snapshot(
+    """Test list_snapshot_options_chain."""
+    result = await options.list_snapshot_options_chain(
         underlying_asset="AAPL",
         contract_type="call",
         limit=10,

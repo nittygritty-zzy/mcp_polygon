@@ -4,7 +4,7 @@ from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
-from ..formatters import json_to_csv, enrich_options_with_gex_and_advanced_greeks
+from ..formatters import json_to_csv, enrich_options_with_gex_and_advanced_greeks, deep_vars
 from ..tool_integration import process_tool_response
 import json
 
@@ -63,7 +63,7 @@ async def list_options_contracts(
                 raw=False,
             ):
                 # Convert OptionsContract object to dict
-                contracts_list.append(contract.to_dict())
+                contracts_list.append(vars(contract))
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_options_contracts(
@@ -471,8 +471,8 @@ async def list_snapshot_options_chain(
                 params=param_dict,
                 raw=False,
             ):
-                # Convert OptionContractSnapshot object to dict
-                options_list.append(option_snapshot.to_dict())
+                # Recursively convert OptionContractSnapshot and nested objects to dict
+                options_list.append(deep_vars(option_snapshot))
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_snapshot_options_chain(
