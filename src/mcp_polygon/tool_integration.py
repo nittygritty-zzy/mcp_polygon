@@ -58,6 +58,7 @@ async def process_tool_response(
             tool_name=tool_name,
             params=params,
             sample_rows=sample_rows,
+            csv_data=csv_data,
         )
 
     # Cache the data
@@ -82,6 +83,7 @@ async def process_tool_response(
             tool_name=tool_name,
             params=params,
             sample_rows=sample_rows,
+            csv_data=csv_data,
         )
 
     except Exception as e:

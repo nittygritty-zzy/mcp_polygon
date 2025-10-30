@@ -37,6 +37,7 @@ class ResponseFormatter:
         tool_name: str,
         params: Dict[str, Any],
         sample_rows: List[Dict[str, Any]],
+        csv_data: str,
     ) -> str:
         """
         Format response for cached data with DuckDB query instructions.
@@ -46,6 +47,7 @@ class ResponseFormatter:
             tool_name: Name of the tool
             params: Parameters used in API call
             sample_rows: First few rows of data for preview
+            csv_data: Original CSV data for schema inference
 
         Returns:
             JSON string with cache location, schema, and query examples
@@ -55,6 +57,9 @@ class ResponseFormatter:
         query_examples = cache_mgr.generate_query_examples(
             tool_name, params, cache_metadata["cache_location"]
         )
+
+        # Use DuckDB to infer schema from CSV data (more accurate than pattern matching)
+        inferred_schema = cache_mgr.infer_schema_from_csv(csv_data)
 
         response = {
             "status": "cached",
@@ -68,7 +73,8 @@ class ResponseFormatter:
                 ),
             },
             "schema": {
-                "columns": cache_metadata["columns"],
+                "inferred_types": inferred_schema,
+                "note": "Schema inferred by DuckDB from CSV data. All columns are stored as VARCHAR in Parquet. Use CAST() to convert to the inferred types for numeric operations, aggregations, and sorting.",
                 "sample_rows": sample_rows[:3],  # First 3 rows
             },
             "query_examples": query_examples,

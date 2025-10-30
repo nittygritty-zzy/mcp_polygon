@@ -683,6 +683,53 @@ class CacheManager:
             "last_cleanup": self.metadata.get("last_cleanup"),
         }
 
+    def infer_schema_from_csv(self, csv_data: str) -> Dict[str, str]:
+        """
+        Use DuckDB's CSV auto-detection to infer proper data types.
+
+        This is more accurate than pattern matching on column names because
+        it analyzes actual data values. DuckDB intelligently detects numeric,
+        boolean, date, and timestamp types.
+
+        Args:
+            csv_data: CSV string data
+
+        Returns:
+            Dictionary mapping column names to DuckDB types (inferred from data)
+        """
+        import duckdb
+        import tempfile
+        import os
+
+        # Write CSV to temp file for DuckDB to analyze
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False
+        ) as f:
+            f.write(csv_data)
+            temp_csv = f.name
+
+        try:
+            con = duckdb.connect()
+
+            # Use DuckDB's auto-detection to infer schema
+            result = con.execute(f"""
+                DESCRIBE SELECT * FROM read_csv('{temp_csv}', AUTO_DETECT=TRUE)
+            """).fetchall()
+
+            schema = {}
+            for col_name, col_type, *_ in result:
+                schema[col_name] = col_type
+
+            con.close()
+            return schema
+
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_csv)
+            except:
+                pass
+
     def generate_query_examples(
         self, tool_name: str, params: Dict[str, Any], cache_location: str
     ) -> List[Dict[str, str]]:
