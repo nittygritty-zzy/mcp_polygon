@@ -337,6 +337,13 @@ class CacheManager:
         # Short interest
         elif tool_name == "list_short_interest":
             ticker = params.get("ticker", "all")
+            settlement_date_gte = params.get("settlement_date_gte")
+            if settlement_date_gte:
+                try:
+                    dt = datetime.strptime(str(settlement_date_gte)[:10], "%Y-%m-%d")
+                    return f"{ticker}/{dt.year}-{dt.month:02d}"
+                except ValueError:
+                    pass
             return ticker
 
         # Short volume

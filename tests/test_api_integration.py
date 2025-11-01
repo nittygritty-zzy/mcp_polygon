@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Comprehensive tests for all MCP tools using real Polygon API."""
+"""API Integration tests for all MCP tools using real Polygon API.
+
+This test suite verifies that all tools can successfully call the Polygon.io API
+and return properly formatted responses.
+
+IMPORTANT: Set the POLYGON_API_KEY environment variable before running these tests:
+    export POLYGON_API_KEY=your_api_key_here
+    pytest tests/test_api_integration.py -v
+"""
 
 import os
 import sys
@@ -10,14 +18,16 @@ import pytest
 # Add src to path
 sys.path.insert(0, "src")
 
-# Check for API key
-POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
-if not POLYGON_API_KEY:
-    pytest.skip("POLYGON_API_KEY environment variable not set", allow_module_level=True)
+# Skip all tests if API key is not set
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("POLYGON_API_KEY"),
+    reason="POLYGON_API_KEY environment variable not set"
+)
 
 # Import all tool modules
 from mcp_polygon.tools import (  # noqa: E402
     aggregates,
+    alpha_vantage,
     corporate_actions,
     currency,
     economics,
@@ -506,6 +516,35 @@ async def test_get_real_time_currency_conversion():
         amount=100,
     )
     assert_csv_output(result)
+
+
+# ============================================================================
+# ALPHA VANTAGE MODULE TESTS
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_earnings_calendar_alpha_vantage():
+    """Test get_earnings_calendar_alpha_vantage."""
+    result = await alpha_vantage.get_earnings_calendar_alpha_vantage(
+        alpha_vantage_api_key="demo",
+        horizon="3month",
+    )
+    # Alpha Vantage returns JSON metadata when cached, or CSV
+    assert isinstance(result, str), "Result should be a string"
+    assert len(result) > 0, "Result should not be empty"
+
+
+@pytest.mark.asyncio
+async def test_get_earnings_calendar_alpha_vantage_with_symbol():
+    """Test get_earnings_calendar_alpha_vantage with specific symbol."""
+    result = await alpha_vantage.get_earnings_calendar_alpha_vantage(
+        alpha_vantage_api_key="demo",
+        symbol="AAPL",
+        horizon="3month",
+    )
+    assert isinstance(result, str), "Result should be a string"
+    assert len(result) > 0, "Result should not be empty"
 
 
 # ============================================================================

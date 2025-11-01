@@ -60,6 +60,17 @@ class TestShortDataNoneFix:
 
         assert partition_key == "GME"
 
+    def test_short_interest_partition_with_ticker_and_settlement_date(self, tmp_path):
+        """Test that list_short_interest generates valid partition key with ticker and settlement date."""
+        cache_mgr = CacheManager(cache_dir=str(tmp_path / "cache"))
+
+        partition_key = cache_mgr._generate_partition_key(
+            "list_short_interest",
+            {"ticker": "GME", "settlement_date_gte": "2025-03-15", "fetch_all": True},
+        )
+
+        assert partition_key == "GME/2025-03"
+
     def test_short_volume_partition_with_ticker_and_date(self, tmp_path):
         """Test that list_short_volume generates valid partition key with ticker and date."""
         cache_mgr = CacheManager(cache_dir=str(tmp_path / "cache"))
