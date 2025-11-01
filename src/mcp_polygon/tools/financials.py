@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -61,7 +62,11 @@ async def list_stock_financials(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for financial in polygon_client.vx.list_stock_financials(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            financials_list = await fetcher.fetch_all(
+                method_name="list_stock_financials",
+                use_vx=True,
                 ticker=ticker,
                 cik=cik,
                 company_name=company_name,
@@ -83,9 +88,7 @@ async def list_stock_financials(
                 sort=sort,
                 order=order,
                 params=params,
-                raw=False,
-            ):
-                financials_list.append(vars(financial))
+            )
         else:
             # Single page approach
             results = polygon_client.vx.list_stock_financials(
@@ -114,6 +117,7 @@ async def list_stock_financials(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             financials_list = data.get("results", [])
 
@@ -974,8 +978,10 @@ async def list_short_interest(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_short_interest(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            short_interest_list = await fetcher.fetch_all(
+                method_name="list_short_interest",
                 ticker=ticker,
                 settlement_date=settlement_date,
                 settlement_date_lt=settlement_date_lt,
@@ -985,9 +991,7 @@ async def list_short_interest(
                 limit=limit,
                 sort=sort,
                 params=param_dict,
-                raw=False,
-            ):
-                short_interest_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_short_interest(
@@ -1004,6 +1008,7 @@ async def list_short_interest(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             short_interest_list = data.get("results", [])
 
@@ -1110,8 +1115,10 @@ async def list_short_volume(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_short_volume(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            short_volume_list = await fetcher.fetch_all(
+                method_name="list_short_volume",
                 ticker=ticker,
                 date=date,
                 date_lt=date_lt,
@@ -1121,9 +1128,7 @@ async def list_short_volume(
                 limit=limit,
                 sort=sort,
                 params=param_dict,
-                raw=False,
-            ):
-                short_volume_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_short_volume(
@@ -1140,6 +1145,7 @@ async def list_short_volume(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             short_volume_list = data.get("results", [])
 

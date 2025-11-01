@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -70,17 +71,17 @@ async def list_ticker_news(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for news_item in polygon_client.list_ticker_news(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            news_list = await fetcher.fetch_all(
+                method_name="list_ticker_news",
                 ticker=ticker,
                 published_utc=published_utc,
                 limit=limit,
                 sort=sort,
                 order=order,
                 params=param_dict,
-                raw=False,
-            ):
-                # Convert TickerNews object to dict
-                news_list.append(vars(news_item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_ticker_news(
@@ -94,6 +95,7 @@ async def list_ticker_news(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             news_list = data.get("results", [])
 

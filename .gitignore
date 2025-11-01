@@ -33,3 +33,12 @@ private_doc/
 
 # Cache directory
 cache/
+
+# Results directory
+results/
+
+# Development scripts (temporary migration tools)
+scripts/
+
+# Claude Code user configuration
+.claude/

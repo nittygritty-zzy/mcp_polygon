@@ -5,6 +5,7 @@ from mcp.types import ToolAnnotations
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -61,17 +62,17 @@ async def list_universal_snapshots(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for snapshot in polygon_client.list_universal_snapshots(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            snapshots_list = await fetcher.fetch_all(
+                method_name="list_universal_snapshots",
                 type=type,
                 ticker_any_of=ticker_any_of,
                 order=order,
                 limit=limit,
                 sort=sort,
                 params=param_dict,
-                raw=False,
-            ):
-                # Convert UniversalSnapshot object to dict
-                snapshots_list.append(vars(snapshot))
+            )
         else:
             # Single page approach
             results = polygon_client.list_universal_snapshots(
@@ -85,6 +86,7 @@ async def list_universal_snapshots(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             snapshots_list = data.get("results", [])
 

@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -60,39 +61,62 @@ async def get_sma(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
-        # Use maximum limit when fetch_all is True
-        actual_limit = 5000 if fetch_all else limit
+        if fetch_all:
+            # Use parallel fetching for all data
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-        # Build kwargs conditionally to avoid passing empty params
-        kwargs = {
-            "ticker": ticker,
-            "timespan": timespan,
-            "adjusted": adjusted,
-            "window": window,
-            "series_type": series_type,
-            "expand_underlying": expand_underlying,
-            "order": order,
-            "limit": actual_limit,
-            "raw": True,
-        }
-        if timestamp is not None:
-            kwargs["timestamp"] = timestamp
-        if final_params:
-            kwargs["params"] = final_params
+            # Build kwargs for fetcher
+            fetch_kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": 5000,
+            }
+            if timestamp is not None:
+                fetch_kwargs["timestamp"] = timestamp
+            if final_params:
+                fetch_kwargs["params"] = final_params
 
-        results = polygon_client.get_sma(**kwargs)
-
-        # Parse the response and extract the values array
-        import json
-
-        data = json.loads(results.data.decode("utf-8"))
-        if "results" in data and "values" in data["results"]:
-            # Wrap the values in a results key for consistent CSV formatting
-            formatted_data = {"results": data["results"]["values"]}
-            csv_data = json_to_csv(formatted_data)
+            sma_list = await fetcher.fetch_all(method_name="get_sma", **fetch_kwargs)
+            csv_data = json_to_csv({"results": sma_list})
+            actual_limit = 5000
         else:
-            # Convert to CSV
-            csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Single-page fetch with raw=True
+            kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": limit,
+                "raw": True,
+            }
+            if timestamp is not None:
+                kwargs["timestamp"] = timestamp
+            if final_params:
+                kwargs["params"] = final_params
+
+            results = polygon_client.get_sma(**kwargs)
+
+            # Parse the response and extract the values array
+            import json
+
+            data = json.loads(results.data.decode("utf-8"))
+            if "results" in data and "values" in data["results"]:
+                # Wrap the values in a results key for consistent CSV formatting
+                formatted_data = {"results": data["results"]["values"]}
+                csv_data = json_to_csv(formatted_data)
+            else:
+                # Convert to CSV
+                csv_data = json_to_csv(results.data.decode("utf-8"))
+
+            actual_limit = limit
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -162,39 +186,62 @@ async def get_ema(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
-        # Use maximum limit when fetch_all is True
-        actual_limit = 5000 if fetch_all else limit
+        if fetch_all:
+            # Use parallel fetching for all data
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-        # Build kwargs conditionally to avoid passing empty params
-        kwargs = {
-            "ticker": ticker,
-            "timespan": timespan,
-            "adjusted": adjusted,
-            "window": window,
-            "series_type": series_type,
-            "expand_underlying": expand_underlying,
-            "order": order,
-            "limit": actual_limit,
-            "raw": True,
-        }
-        if timestamp is not None:
-            kwargs["timestamp"] = timestamp
-        if final_params:
-            kwargs["params"] = final_params
+            # Build kwargs for fetcher
+            fetch_kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": 5000,
+            }
+            if timestamp is not None:
+                fetch_kwargs["timestamp"] = timestamp
+            if final_params:
+                fetch_kwargs["params"] = final_params
 
-        results = polygon_client.get_ema(**kwargs)
-
-        # Parse the response and extract the values array
-        import json
-
-        data = json.loads(results.data.decode("utf-8"))
-        if "results" in data and "values" in data["results"]:
-            # Wrap the values in a results key for consistent CSV formatting
-            formatted_data = {"results": data["results"]["values"]}
-            csv_data = json_to_csv(formatted_data)
+            ema_list = await fetcher.fetch_all(method_name="get_ema", **fetch_kwargs)
+            csv_data = json_to_csv({"results": ema_list})
+            actual_limit = 5000
         else:
-            # Convert to CSV
-            csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Single-page fetch with raw=True
+            kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": limit,
+                "raw": True,
+            }
+            if timestamp is not None:
+                kwargs["timestamp"] = timestamp
+            if final_params:
+                kwargs["params"] = final_params
+
+            results = polygon_client.get_ema(**kwargs)
+
+            # Parse the response and extract the values array
+            import json
+
+            data = json.loads(results.data.decode("utf-8"))
+            if "results" in data and "values" in data["results"]:
+                # Wrap the values in a results key for consistent CSV formatting
+                formatted_data = {"results": data["results"]["values"]}
+                csv_data = json_to_csv(formatted_data)
+            else:
+                # Convert to CSV
+                csv_data = json_to_csv(results.data.decode("utf-8"))
+
+            actual_limit = limit
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -267,41 +314,66 @@ async def get_macd(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
-        # Use maximum limit when fetch_all is True
-        actual_limit = 5000 if fetch_all else limit
+        if fetch_all:
+            # Use parallel fetching for all data
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-        # Build kwargs conditionally to avoid passing empty params
-        kwargs = {
-            "ticker": ticker,
-            "timespan": timespan,
-            "adjusted": adjusted,
-            "short_window": short_window,
-            "long_window": long_window,
-            "signal_window": signal_window,
-            "series_type": series_type,
-            "expand_underlying": expand_underlying,
-            "order": order,
-            "limit": actual_limit,
-            "raw": True,
-        }
-        if timestamp is not None:
-            kwargs["timestamp"] = timestamp
-        if final_params:
-            kwargs["params"] = final_params
+            # Build kwargs for fetcher
+            fetch_kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "short_window": short_window,
+                "long_window": long_window,
+                "signal_window": signal_window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": 5000,
+            }
+            if timestamp is not None:
+                fetch_kwargs["timestamp"] = timestamp
+            if final_params:
+                fetch_kwargs["params"] = final_params
 
-        results = polygon_client.get_macd(**kwargs)
-
-        # Parse the response and extract the values array
-        import json
-
-        data = json.loads(results.data.decode("utf-8"))
-        if "results" in data and "values" in data["results"]:
-            # Wrap the values in a results key for consistent CSV formatting
-            formatted_data = {"results": data["results"]["values"]}
-            csv_data = json_to_csv(formatted_data)
+            macd_list = await fetcher.fetch_all(method_name="get_macd", **fetch_kwargs)
+            csv_data = json_to_csv({"results": macd_list})
+            actual_limit = 5000
         else:
-            # Convert to CSV
-            csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Single-page fetch with raw=True
+            kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "short_window": short_window,
+                "long_window": long_window,
+                "signal_window": signal_window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": limit,
+                "raw": True,
+            }
+            if timestamp is not None:
+                kwargs["timestamp"] = timestamp
+            if final_params:
+                kwargs["params"] = final_params
+
+            results = polygon_client.get_macd(**kwargs)
+
+            # Parse the response and extract the values array
+            import json
+
+            data = json.loads(results.data.decode("utf-8"))
+            if "results" in data and "values" in data["results"]:
+                # Wrap the values in a results key for consistent CSV formatting
+                formatted_data = {"results": data["results"]["values"]}
+                csv_data = json_to_csv(formatted_data)
+            else:
+                # Convert to CSV
+                csv_data = json_to_csv(results.data.decode("utf-8"))
+
+            actual_limit = limit
 
         # Process with intelligent caching
         return await process_tool_response(
@@ -369,39 +441,62 @@ async def get_rsi(
         if timestamp_lt is not None:
             final_params["timestamp.lt"] = timestamp_lt
 
-        # Use maximum limit when fetch_all is True
-        actual_limit = 5000 if fetch_all else limit
+        if fetch_all:
+            # Use parallel fetching for all data
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-        # Build kwargs conditionally to avoid passing empty params
-        kwargs = {
-            "ticker": ticker,
-            "timespan": timespan,
-            "adjusted": adjusted,
-            "window": window,
-            "series_type": series_type,
-            "expand_underlying": expand_underlying,
-            "order": order,
-            "limit": actual_limit,
-            "raw": True,
-        }
-        if timestamp is not None:
-            kwargs["timestamp"] = timestamp
-        if final_params:
-            kwargs["params"] = final_params
+            # Build kwargs for fetcher
+            fetch_kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": 5000,
+            }
+            if timestamp is not None:
+                fetch_kwargs["timestamp"] = timestamp
+            if final_params:
+                fetch_kwargs["params"] = final_params
 
-        results = polygon_client.get_rsi(**kwargs)
-
-        # Parse the response and extract the values array
-        import json
-
-        data = json.loads(results.data.decode("utf-8"))
-        if "results" in data and "values" in data["results"]:
-            # Wrap the values in a results key for consistent CSV formatting
-            formatted_data = {"results": data["results"]["values"]}
-            csv_data = json_to_csv(formatted_data)
+            rsi_list = await fetcher.fetch_all(method_name="get_rsi", **fetch_kwargs)
+            csv_data = json_to_csv({"results": rsi_list})
+            actual_limit = 5000
         else:
-            # Convert to CSV
-            csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Single-page fetch with raw=True
+            kwargs = {
+                "ticker": ticker,
+                "timespan": timespan,
+                "adjusted": adjusted,
+                "window": window,
+                "series_type": series_type,
+                "expand_underlying": expand_underlying,
+                "order": order,
+                "limit": limit,
+                "raw": True,
+            }
+            if timestamp is not None:
+                kwargs["timestamp"] = timestamp
+            if final_params:
+                kwargs["params"] = final_params
+
+            results = polygon_client.get_rsi(**kwargs)
+
+            # Parse the response and extract the values array
+            import json
+
+            data = json.loads(results.data.decode("utf-8"))
+            if "results" in data and "values" in data["results"]:
+                # Wrap the values in a results key for consistent CSV formatting
+                formatted_data = {"results": data["results"]["values"]}
+                csv_data = json_to_csv(formatted_data)
+            else:
+                # Convert to CSV
+                csv_data = json_to_csv(results.data.decode("utf-8"))
+
+            actual_limit = limit
 
         # Process with intelligent caching
         return await process_tool_response(

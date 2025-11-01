@@ -30,6 +30,35 @@ This server exposes all Polygon.io API endpoints as MCP tools, providing access 
 - Financial fundamentals
 - Market status and holidays
 
+### 🚀 LEAP Screener Scripts
+
+This repository includes Python scripts for screening LEAP (Long-term Equity Anticipation) call options:
+
+- **[scripts/leap_screener.py](scripts/)** - Quick interactive screener for 2-10 stocks with formatted output
+- **[scripts/bulk_leap_screener.py](scripts/)** - Bulk processor for 50+ stocks, auto-caches missing data
+- **[scripts/cache_tickers.py](scripts/)** - Standalone caching utility for bulk operations
+- **[scripts/tickers_sp100.txt](scripts/)** - S&P 100 ticker list
+
+**Quick Start:**
+```bash
+export POLYGON_API_KEY='your_key_here'
+
+# Quick interactive analysis (2-10 stocks)
+uv run python scripts/leap_screener.py AAPL NVDA MSFT
+
+# Bulk processing (50+ stocks)
+uv run python scripts/bulk_leap_screener.py --preset sp100
+```
+
+**Complete Documentation:** See [scripts/README.md](scripts/README.md) for:
+- Tool comparison and usage guide
+- Auto-caching feature guide
+- Complete workflow walkthrough
+- Quick reference cheat sheet
+- Scoring system details
+- Common workflows & troubleshooting
+- MCP integration examples
+
 ## Installation
 
 ### Prerequisites

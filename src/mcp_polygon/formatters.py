@@ -33,7 +33,7 @@ def deep_vars(obj: Any) -> Any:
         return {key: deep_vars(value) for key, value in obj.items()}
 
     # Handle objects with __dict__ (like @modelclass objects)
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         obj_dict = vars(obj)
         return {key: deep_vars(value) for key, value in obj_dict.items()}
 

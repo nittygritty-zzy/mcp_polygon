@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -43,8 +44,10 @@ async def list_treasury_yields(
         yields_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_treasury_yields(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            yields_list = await fetcher.fetch_all(
+                method_name="list_treasury_yields",
                 date=date,
                 date_lt=date_lt,
                 date_lte=date_lte,
@@ -54,9 +57,7 @@ async def list_treasury_yields(
                 sort=sort,
                 order=order,
                 params=params,
-                raw=False,
-            ):
-                yields_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_treasury_yields(
@@ -73,6 +74,7 @@ async def list_treasury_yields(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             yields_list = data.get("results", [])
 
@@ -130,8 +132,10 @@ async def list_inflation(
         inflation_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_inflation(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            inflation_list = await fetcher.fetch_all(
+                method_name="list_inflation",
                 date=date,
                 date_any_of=date_any_of,
                 date_gt=date_gt,
@@ -141,9 +145,7 @@ async def list_inflation(
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                inflation_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_inflation(
@@ -160,6 +162,7 @@ async def list_inflation(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             inflation_list = data.get("results", [])
 
@@ -243,6 +246,7 @@ async def list_inflation_expectations(
             )
 
             import json
+
             if isinstance(results, str):
                 data = json.loads(results)
             else:
@@ -259,6 +263,7 @@ async def list_inflation_expectations(
             )
 
             import json
+
             if isinstance(results, str):
                 data = json.loads(results)
             else:

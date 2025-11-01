@@ -4,8 +4,12 @@ from typing import Optional, Any, Dict, Union
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
-from ..formatters import json_to_csv, enrich_options_with_gex_and_advanced_greeks, deep_vars
+from ..formatters import (
+    json_to_csv,
+    enrich_options_with_gex_and_advanced_greeks,
+)
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 import json
 
 
@@ -49,7 +53,10 @@ async def list_options_contracts(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for contract in polygon_client.list_options_contracts(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            contracts_list = await fetcher.fetch_all(
+                method_name="list_options_contracts",
                 underlying_ticker=underlying_ticker,
                 contract_type=contract_type,
                 expiration_date=expiration_date,
@@ -60,10 +67,7 @@ async def list_options_contracts(
                 sort=sort,
                 order=order,
                 params=params,
-                raw=False,
-            ):
-                # Convert OptionsContract object to dict
-                contracts_list.append(vars(contract))
+            )
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_options_contracts(
@@ -373,6 +377,7 @@ async def get_options_snapshot(
         except Exception as e:
             # If we can't get the stock price, continue without enrichment
             import sys
+
             print(
                 f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
                 file=sys.stderr,
@@ -465,14 +470,13 @@ async def list_snapshot_options_chain(
                 },
             }
 
-            # Use SDK iterator (raw=False) for automatic pagination
-            for option_snapshot in polygon_client.list_snapshot_options_chain(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            options_list = await fetcher.fetch_all(
+                method_name="list_snapshot_options_chain",
                 underlying_asset=underlying_asset,
                 params=param_dict,
-                raw=False,
-            ):
-                # Recursively convert OptionContractSnapshot and nested objects to dict
-                options_list.append(deep_vars(option_snapshot))
+            )
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_snapshot_options_chain(

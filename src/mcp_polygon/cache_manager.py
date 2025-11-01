@@ -232,7 +232,7 @@ class CacheManager:
                                 expiration = f"{year}-{month:02d}-{day:02d}"
                                 return f"{underlying}/{expiration}"
                             break
-                except:
+                except (ValueError, IndexError):
                     pass
             return options_ticker
 
@@ -312,7 +312,9 @@ class CacheManager:
 
         # Futures schedules
         elif tool_name == "list_futures_schedules":
-            session_date = params.get("session_end_date", datetime.now().strftime("%Y-%m-%d"))
+            session_date = params.get(
+                "session_end_date", datetime.now().strftime("%Y-%m-%d")
+            )
             trading_venue = params.get("trading_venue", "all")
             return f"{session_date}/{trading_venue}"
 
@@ -572,6 +574,126 @@ class CacheManager:
             "params": params,
         }
 
+    def save_batch(
+        self,
+        tool_name: str,
+        params: Dict[str, Any],
+        csv_data: str,
+        batch_num: int,
+        columns: Optional[List[str]] = None,
+    ) -> Path:
+        """
+        Save a batch of CSV data to a numbered Parquet file.
+
+        This allows incremental writing without holding all data in memory.
+        Multiple batches are written as separate files (data_001.parquet, data_002.parquet, etc.)
+        which can be queried together using glob patterns.
+
+        Args:
+            tool_name: Name of the tool
+            params: Parameters used in the API call
+            csv_data: CSV string data for this batch
+            batch_num: Batch number (0-indexed)
+            columns: Optional column names (extracted from first batch)
+
+        Returns:
+            Path to the written Parquet file
+        """
+        import io
+        import csv as csv_module
+
+        # Parse CSV to DataFrame
+        reader = csv_module.DictReader(io.StringIO(csv_data))
+        rows = list(reader)
+
+        if not rows:
+            # Empty batch, skip
+            return None
+
+        df = pd.DataFrame(rows)
+
+        # Get partition path
+        partition_path, partition_key = self._get_partition_path(tool_name, params)
+        partition_path.mkdir(parents=True, exist_ok=True)
+
+        # Save to numbered Parquet file
+        parquet_file = partition_path / f"data_{batch_num:03d}.parquet"
+        table = pa.Table.from_pandas(df)
+        pq.write_table(table, parquet_file, compression="snappy")
+
+        return parquet_file
+
+    def finalize_batch_save(
+        self,
+        tool_name: str,
+        params: Dict[str, Any],
+        total_rows: int,
+        columns: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Finalize batch writing by updating metadata.
+
+        Call this after all batches have been written via save_batch().
+
+        Args:
+            tool_name: Name of the tool
+            params: Parameters used in the API call
+            total_rows: Total number of rows across all batches
+            columns: Column names
+
+        Returns:
+            Metadata dictionary with cache location and query info
+        """
+        # Get partition path
+        partition_path, partition_key = self._get_partition_path(tool_name, params)
+
+        # Calculate total file size
+        total_size = sum(
+            f.stat().st_size
+            for f in partition_path.glob("data_*.parquet")
+            if f.is_file()
+        )
+
+        # Update metadata
+        cache_key = f"{tool_name}/{partition_key}"
+
+        self.metadata["entries"][cache_key] = {
+            "tool_name": tool_name,
+            "partition_key": partition_key,
+            "file_path": str(partition_path / "data_*.parquet"),
+            "file_size_bytes": total_size,
+            "row_count": total_rows,
+            "columns": columns,
+            "parameters": params,
+            "created_at": datetime.now().isoformat(),
+            "last_accessed": datetime.now().isoformat(),
+        }
+
+        # Update total size
+        self.metadata["total_size_bytes"] = sum(
+            entry["file_size_bytes"] for entry in self.metadata["entries"].values()
+        )
+
+        self._save_metadata()
+
+        # Check if cleanup needed
+        if self.metadata["total_size_bytes"] > self.max_size_bytes:
+            self._cleanup_lru()
+
+        # Return cache metadata for response
+        glob_pattern = str(partition_path / "*.parquet")
+
+        return {
+            "cached": True,
+            "cache_location": glob_pattern,
+            "partition_key": partition_key,
+            "row_count": total_rows,
+            "columns": columns,
+            "file_size_bytes": total_size,
+            "tool_name": tool_name,
+            "params": params,
+        }
+
     def get(self, tool_name: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Retrieve cached data metadata if exists and not expired.
@@ -702,9 +824,7 @@ class CacheManager:
         import os
 
         # Write CSV to temp file for DuckDB to analyze
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_data)
             temp_csv = f.name
 
@@ -727,7 +847,7 @@ class CacheManager:
             # Clean up temp file
             try:
                 os.unlink(temp_csv)
-            except:
+            except OSError:
                 pass
 
     def generate_query_examples(

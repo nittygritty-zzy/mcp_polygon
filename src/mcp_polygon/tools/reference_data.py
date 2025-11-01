@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -122,7 +123,10 @@ async def list_tickers(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for ticker_obj in polygon_client.list_tickers(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            tickers_list = await fetcher.fetch_all(
+                method_name="list_tickers",
                 ticker=ticker,
                 type=type,
                 market=market,
@@ -136,10 +140,7 @@ async def list_tickers(
                 order=order,
                 limit=limit,
                 params=param_dict,
-                raw=False,
-            ):
-                # Convert Ticker object to dict
-                tickers_list.append(vars(ticker_obj))
+            )
         else:
             # Single page approach
             results = polygon_client.list_tickers(
@@ -160,6 +161,7 @@ async def list_tickers(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             tickers_list = data.get("results", [])
 
@@ -216,7 +218,10 @@ async def get_all_tickers(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for ticker_obj in polygon_client.list_tickers(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            tickers_list = await fetcher.fetch_all(
+                method_name="list_tickers",
                 market=market,
                 type=type,
                 active=active,
@@ -224,10 +229,7 @@ async def get_all_tickers(
                 order=order,
                 limit=limit,
                 params=params,
-                raw=False,
-            ):
-                # Convert Ticker object to dict
-                tickers_list.append(vars(ticker_obj))
+            )
         else:
             # Single page approach
             results = polygon_client.list_tickers(
@@ -242,6 +244,7 @@ async def get_all_tickers(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             tickers_list = data.get("results", [])
 

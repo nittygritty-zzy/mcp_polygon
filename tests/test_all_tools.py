@@ -3,8 +3,9 @@
 
 import os
 import sys
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
 
 # Add src to path
 sys.path.insert(0, "src")
@@ -15,18 +16,18 @@ if not POLYGON_API_KEY:
     pytest.skip("POLYGON_API_KEY environment variable not set", allow_module_level=True)
 
 # Import all tool modules
-from mcp_polygon.tools import (
+from mcp_polygon.tools import (  # noqa: E402
     aggregates,
+    corporate_actions,
+    currency,
+    economics,
+    financials,
+    futures,
+    news,
+    options,
+    reference_data,
     snapshots,
     technical_indicators,
-    reference_data,
-    corporate_actions,
-    financials,
-    news,
-    economics,
-    options,
-    futures,
-    currency,
 )
 
 

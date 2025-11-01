@@ -6,6 +6,7 @@ from datetime import date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -39,8 +40,10 @@ async def list_futures_aggregates(
         aggregates_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for agg in polygon_client.list_futures_aggregates(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            aggregates_list = await fetcher.fetch_all(
+                method_name="list_futures_aggregates",
                 ticker=ticker,
                 resolution=resolution,
                 window_start=window_start,
@@ -51,9 +54,7 @@ async def list_futures_aggregates(
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                aggregates_list.append(vars(agg))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_aggregates(
@@ -71,6 +72,7 @@ async def list_futures_aggregates(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             aggregates_list = data.get("results", [])
 
@@ -125,8 +127,10 @@ async def list_futures_contracts(
         contracts_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for contract in polygon_client.list_futures_contracts(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            contracts_list = await fetcher.fetch_all(
+                method_name="list_futures_contracts",
                 product_code=product_code,
                 first_trade_date=first_trade_date,
                 last_trade_date=last_trade_date,
@@ -136,9 +140,7 @@ async def list_futures_contracts(
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                contracts_list.append(vars(contract))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_contracts(
@@ -155,6 +157,7 @@ async def list_futures_contracts(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             contracts_list = data.get("results", [])
 
@@ -235,8 +238,10 @@ async def list_futures_products(
         products_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for product in polygon_client.list_futures_products(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            products_list = await fetcher.fetch_all(
+                method_name="list_futures_products",
                 name=name,
                 name_search=name_search,
                 as_of=as_of,
@@ -249,9 +254,7 @@ async def list_futures_products(
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                products_list.append(vars(product))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_products(
@@ -271,6 +274,7 @@ async def list_futures_products(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             products_list = data.get("results", [])
 
@@ -348,16 +352,16 @@ async def list_futures_schedules(
         schedules_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for schedule in polygon_client.list_futures_schedules(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            schedules_list = await fetcher.fetch_all(
+                method_name="list_futures_schedules",
                 session_end_date=session_end_date,
                 trading_venue=trading_venue,
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                schedules_list.append(vars(schedule))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules(
@@ -370,6 +374,7 @@ async def list_futures_schedules(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             schedules_list = data.get("results", [])
 
@@ -424,8 +429,10 @@ async def list_futures_schedules_by_product_code(
         schedules_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for schedule in polygon_client.list_futures_schedules_by_product_code(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            schedules_list = await fetcher.fetch_all(
+                method_name="list_futures_schedules_by_product_code",
                 product_code=product_code,
                 session_end_date=session_end_date,
                 session_end_date_lt=session_end_date_lt,
@@ -435,9 +442,7 @@ async def list_futures_schedules_by_product_code(
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                schedules_list.append(vars(schedule))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules_by_product_code(
@@ -454,6 +459,7 @@ async def list_futures_schedules_by_product_code(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             schedules_list = data.get("results", [])
 
@@ -503,16 +509,16 @@ async def list_futures_market_statuses(
         statuses_list = []
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for status in polygon_client.list_futures_market_statuses(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            statuses_list = await fetcher.fetch_all(
+                method_name="list_futures_market_statuses",
                 product_code_any_of=product_code_any_of,
                 product_code=product_code,
                 limit=limit,
                 sort=sort,
                 params=params,
-                raw=False,
-            ):
-                statuses_list.append(vars(status))
+            )
         else:
             # Single page approach
             results = polygon_client.list_futures_market_statuses(
@@ -525,6 +531,7 @@ async def list_futures_market_statuses(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             statuses_list = data.get("results", [])
 

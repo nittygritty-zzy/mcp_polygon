@@ -6,6 +6,7 @@ from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response
+from ..parallel_fetcher import PolygonParallelFetcher
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -69,8 +70,10 @@ async def list_splits(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_splits(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            splits_list = await fetcher.fetch_all(
+                method_name="list_splits",
                 ticker=ticker,
                 execution_date=execution_date,
                 reverse_split=reverse_split,
@@ -78,9 +81,7 @@ async def list_splits(
                 sort=sort,
                 order=order,
                 params=param_dict,
-                raw=False,
-            ):
-                splits_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_splits(
@@ -95,6 +96,7 @@ async def list_splits(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             splits_list = data.get("results", [])
 
@@ -218,8 +220,10 @@ async def list_dividends(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            for item in polygon_client.list_dividends(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            dividends_list = await fetcher.fetch_all(
+                method_name="list_dividends",
                 ticker=ticker,
                 ex_dividend_date=ex_dividend_date,
                 record_date=record_date,
@@ -232,9 +236,7 @@ async def list_dividends(
                 sort=sort,
                 order=order,
                 params=param_dict,
-                raw=False,
-            ):
-                dividends_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.list_dividends(
@@ -254,6 +256,7 @@ async def list_dividends(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             dividends_list = data.get("results", [])
 
@@ -361,7 +364,11 @@ async def list_ipos(
 
         if fetch_all:
             # Use iterator approach for automatic pagination
-            for item in polygon_client.vx.list_ipos(
+            # Use parallel fetcher with 5 workers for maximum speed
+            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            ipos_list = await fetcher.fetch_all(
+                method_name="list_ipos",
+                use_vx=True,
                 ticker=ticker,
                 us_code=us_code,
                 isin=isin,
@@ -375,9 +382,7 @@ async def list_ipos(
                 sort=sort,
                 order=order,
                 params=params,
-                raw=False,
-            ):
-                ipos_list.append(vars(item))
+            )
         else:
             # Single page approach
             results = polygon_client.vx.list_ipos(
@@ -398,6 +403,7 @@ async def list_ipos(
             )
 
             import json
+
             data = json.loads(results.data.decode("utf-8"))
             ipos_list = data.get("results", [])
 

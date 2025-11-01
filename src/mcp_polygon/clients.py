@@ -3,6 +3,10 @@
 import os
 import logging
 import warnings
+from importlib.metadata import version, PackageNotFoundError
+
+from mcp.server.fastmcp import FastMCP
+from polygon import RESTClient
 
 # Suppress duplicate tool registration warnings during import
 # These warnings occur because multiple tool modules import poly_mcp,
@@ -13,16 +17,10 @@ warnings.filterwarnings("ignore", message=".*Tool already exists.*")
 
 # Also suppress Rich console warnings if possible
 try:
-    from rich.logging import RichHandler
-
     logging.getLogger().handlers = []  # Clear existing handlers
     logging.getLogger().addHandler(logging.NullHandler())  # Add null handler
-except ImportError:
+except Exception:  # noqa: S110
     pass
-
-from mcp.server.fastmcp import FastMCP
-from polygon import RESTClient
-from importlib.metadata import version, PackageNotFoundError
 
 # Get API key from environment
 POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
