@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -50,6 +50,14 @@ async def get_sma(
     Returns: timestamp, value. Common windows: 50-day, 200-day. Golden Cross (50>200)=bullish, Death Cross (50<200)=bearish.
     """
     try:
+        tool_params = {
+            "ticker": ticker,
+            "window": window,
+            "timespan": timespan,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
         if timestamp_gte is not None:
@@ -62,30 +70,61 @@ async def get_sma(
             final_params["timestamp.lt"] = timestamp_lt
 
         if fetch_all:
-            # Use parallel fetching for all data
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("get_sma", tool_params)
 
-            # Build kwargs for fetcher
-            fetch_kwargs = {
-                "ticker": ticker,
-                "timespan": timespan,
-                "adjusted": adjusted,
-                "window": window,
-                "series_type": series_type,
-                "expand_underlying": expand_underlying,
-                "order": order,
-                "limit": 5000,
-            }
-            if timestamp is not None:
-                fetch_kwargs["timestamp"] = timestamp
-            if final_params:
-                fetch_kwargs["params"] = final_params
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-            sma_list = await fetcher.fetch_all(method_name="get_sma", **fetch_kwargs)
-            csv_data = json_to_csv({"results": sma_list})
-            actual_limit = 5000
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                await fetcher.fetch_all(
+                    method_name="get_sma", batch_callback=batch_callback, **fetch_kwargs
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                sma_list = await fetcher.fetch_all(
+                    method_name="get_sma", **fetch_kwargs
+                )
+                csv_data = json_to_csv({"results": sma_list})
+                return await process_tool_response("get_sma", tool_params, csv_data)
         else:
-            # Single-page fetch with raw=True
+            # Single page approach
             kwargs = {
                 "ticker": ticker,
                 "timespan": timespan,
@@ -116,20 +155,8 @@ async def get_sma(
                 # Convert to CSV
                 csv_data = json_to_csv(results.data.decode("utf-8"))
 
-            actual_limit = limit
-
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_sma",
-            params={
-                "ticker": ticker,
-                "window": window,
-                "timespan": timespan,
-                "limit": actual_limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("get_sma", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -175,6 +202,14 @@ async def get_ema(
     Returns: timestamp, value. Common windows: 12, 26 (MACD components), 50, 200. More responsive than SMA.
     """
     try:
+        tool_params = {
+            "ticker": ticker,
+            "window": window,
+            "timespan": timespan,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
         if timestamp_gte is not None:
@@ -187,30 +222,61 @@ async def get_ema(
             final_params["timestamp.lt"] = timestamp_lt
 
         if fetch_all:
-            # Use parallel fetching for all data
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("get_ema", tool_params)
 
-            # Build kwargs for fetcher
-            fetch_kwargs = {
-                "ticker": ticker,
-                "timespan": timespan,
-                "adjusted": adjusted,
-                "window": window,
-                "series_type": series_type,
-                "expand_underlying": expand_underlying,
-                "order": order,
-                "limit": 5000,
-            }
-            if timestamp is not None:
-                fetch_kwargs["timestamp"] = timestamp
-            if final_params:
-                fetch_kwargs["params"] = final_params
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-            ema_list = await fetcher.fetch_all(method_name="get_ema", **fetch_kwargs)
-            csv_data = json_to_csv({"results": ema_list})
-            actual_limit = 5000
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                await fetcher.fetch_all(
+                    method_name="get_ema", batch_callback=batch_callback, **fetch_kwargs
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                ema_list = await fetcher.fetch_all(
+                    method_name="get_ema", **fetch_kwargs
+                )
+                csv_data = json_to_csv({"results": ema_list})
+                return await process_tool_response("get_ema", tool_params, csv_data)
         else:
-            # Single-page fetch with raw=True
+            # Single page approach
             kwargs = {
                 "ticker": ticker,
                 "timespan": timespan,
@@ -241,20 +307,8 @@ async def get_ema(
                 # Convert to CSV
                 csv_data = json_to_csv(results.data.decode("utf-8"))
 
-            actual_limit = limit
-
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_ema",
-            params={
-                "ticker": ticker,
-                "window": window,
-                "timespan": timespan,
-                "limit": actual_limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("get_ema", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -303,6 +357,16 @@ async def get_macd(
     Returns: timestamp, value (MACD line), signal (signal line), histogram. Bullish: MACD crosses above signal.
     """
     try:
+        tool_params = {
+            "ticker": ticker,
+            "short_window": short_window,
+            "long_window": long_window,
+            "signal_window": signal_window,
+            "timespan": timespan,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
         if timestamp_gte is not None:
@@ -315,32 +379,67 @@ async def get_macd(
             final_params["timestamp.lt"] = timestamp_lt
 
         if fetch_all:
-            # Use parallel fetching for all data
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("get_macd", tool_params)
 
-            # Build kwargs for fetcher
-            fetch_kwargs = {
-                "ticker": ticker,
-                "timespan": timespan,
-                "adjusted": adjusted,
-                "short_window": short_window,
-                "long_window": long_window,
-                "signal_window": signal_window,
-                "series_type": series_type,
-                "expand_underlying": expand_underlying,
-                "order": order,
-                "limit": 5000,
-            }
-            if timestamp is not None:
-                fetch_kwargs["timestamp"] = timestamp
-            if final_params:
-                fetch_kwargs["params"] = final_params
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-            macd_list = await fetcher.fetch_all(method_name="get_macd", **fetch_kwargs)
-            csv_data = json_to_csv({"results": macd_list})
-            actual_limit = 5000
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "short_window": short_window,
+                    "long_window": long_window,
+                    "signal_window": signal_window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                await fetcher.fetch_all(
+                    method_name="get_macd",
+                    batch_callback=batch_callback,
+                    **fetch_kwargs,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "short_window": short_window,
+                    "long_window": long_window,
+                    "signal_window": signal_window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                macd_list = await fetcher.fetch_all(
+                    method_name="get_macd", **fetch_kwargs
+                )
+                csv_data = json_to_csv({"results": macd_list})
+                return await process_tool_response("get_macd", tool_params, csv_data)
         else:
-            # Single-page fetch with raw=True
+            # Single page approach
             kwargs = {
                 "ticker": ticker,
                 "timespan": timespan,
@@ -373,21 +472,8 @@ async def get_macd(
                 # Convert to CSV
                 csv_data = json_to_csv(results.data.decode("utf-8"))
 
-            actual_limit = limit
-
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_macd",
-            params={
-                "ticker": ticker,
-                "short_window": short_window,
-                "long_window": long_window,
-                "signal_window": signal_window,
-                "limit": actual_limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("get_macd", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -430,6 +516,14 @@ async def get_rsi(
     Returns: timestamp, value (RSI 0-100, <30 oversold, >70 overbought)
     """
     try:
+        tool_params = {
+            "ticker": ticker,
+            "window": window,
+            "timespan": timespan,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
         if timestamp_gte is not None:
@@ -442,30 +536,61 @@ async def get_rsi(
             final_params["timestamp.lt"] = timestamp_lt
 
         if fetch_all:
-            # Use parallel fetching for all data
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("get_rsi", tool_params)
 
-            # Build kwargs for fetcher
-            fetch_kwargs = {
-                "ticker": ticker,
-                "timespan": timespan,
-                "adjusted": adjusted,
-                "window": window,
-                "series_type": series_type,
-                "expand_underlying": expand_underlying,
-                "order": order,
-                "limit": 5000,
-            }
-            if timestamp is not None:
-                fetch_kwargs["timestamp"] = timestamp
-            if final_params:
-                fetch_kwargs["params"] = final_params
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
 
-            rsi_list = await fetcher.fetch_all(method_name="get_rsi", **fetch_kwargs)
-            csv_data = json_to_csv({"results": rsi_list})
-            actual_limit = 5000
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                await fetcher.fetch_all(
+                    method_name="get_rsi", batch_callback=batch_callback, **fetch_kwargs
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+
+                # Build kwargs for fetcher
+                fetch_kwargs = {
+                    "ticker": ticker,
+                    "timespan": timespan,
+                    "adjusted": adjusted,
+                    "window": window,
+                    "series_type": series_type,
+                    "expand_underlying": expand_underlying,
+                    "order": order,
+                    "limit": 5000,
+                }
+                if timestamp is not None:
+                    fetch_kwargs["timestamp"] = timestamp
+                if final_params:
+                    fetch_kwargs["params"] = final_params
+
+                rsi_list = await fetcher.fetch_all(
+                    method_name="get_rsi", **fetch_kwargs
+                )
+                csv_data = json_to_csv({"results": rsi_list})
+                return await process_tool_response("get_rsi", tool_params, csv_data)
         else:
-            # Single-page fetch with raw=True
+            # Single page approach
             kwargs = {
                 "ticker": ticker,
                 "timespan": timespan,
@@ -496,19 +621,7 @@ async def get_rsi(
                 # Convert to CSV
                 csv_data = json_to_csv(results.data.decode("utf-8"))
 
-            actual_limit = limit
-
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_rsi",
-            params={
-                "ticker": ticker,
-                "window": window,
-                "timespan": timespan,
-                "limit": actual_limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("get_rsi", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"

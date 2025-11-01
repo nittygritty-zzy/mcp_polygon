@@ -159,23 +159,55 @@ async def list_aggs(
     RECOMMENDED: Always use fetch_all=True to cache complete OHLC data locally for efficient DuckDB analysis.
     """
     try:
-        aggs_list = []
+        tool_params = {
+            "ticker": ticker,
+            "multiplier": multiplier,
+            "timespan": timespan,
+            "from_": str(from_),
+            "to": str(to),
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            aggs_list = await fetcher.fetch_all(
-                method_name="list_aggs",
-                ticker=ticker,
-                multiplier=multiplier,
-                timespan=timespan,
-                from_=from_,
-                to=to,
-                adjusted=adjusted,
-                sort=sort,
-                limit=limit,
-                params=params,
-            )
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("list_aggs", tool_params)
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_aggs",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    multiplier=multiplier,
+                    timespan=timespan,
+                    from_=from_,
+                    to=to,
+                    adjusted=adjusted,
+                    sort=sort,
+                    limit=limit,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                aggs_list = await fetcher.fetch_all(
+                    method_name="list_aggs",
+                    ticker=ticker,
+                    multiplier=multiplier,
+                    timespan=timespan,
+                    from_=from_,
+                    to=to,
+                    adjusted=adjusted,
+                    sort=sort,
+                    limit=limit,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": aggs_list})
+                return await process_tool_response("list_aggs", tool_params, csv_data)
         else:
             # Single page approach
             results = polygon_client.list_aggs(
@@ -196,26 +228,14 @@ async def list_aggs(
             data = json.loads(results.data.decode("utf-8"))
             aggs_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": aggs_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": aggs_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_aggs",
-            params={
-                "ticker": ticker,
-                "multiplier": multiplier,
-                "timespan": timespan,
-                "from_": str(from_),
-                "to": str(to),
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_aggs", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 

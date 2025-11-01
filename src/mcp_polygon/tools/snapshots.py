@@ -4,7 +4,7 @@ from typing import Optional, Any, Dict, List
 from mcp.types import ToolAnnotations
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -43,7 +43,12 @@ async def list_universal_snapshots(
     Returns: ticker, type, market_status, last_trade, last_quote. Stocks include session data, options include greeks/IV.
     """
     try:
-        snapshots_list = []
+        tool_params = {
+            "type": type,
+            "ticker_any_of": ticker_any_of,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -61,18 +66,42 @@ async def list_universal_snapshots(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            snapshots_list = await fetcher.fetch_all(
-                method_name="list_universal_snapshots",
-                type=type,
-                ticker_any_of=ticker_any_of,
-                order=order,
-                limit=limit,
-                sort=sort,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_universal_snapshots", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_universal_snapshots",
+                    batch_callback=batch_callback,
+                    type=type,
+                    ticker_any_of=ticker_any_of,
+                    order=order,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                snapshots_list = await fetcher.fetch_all(
+                    method_name="list_universal_snapshots",
+                    type=type,
+                    ticker_any_of=ticker_any_of,
+                    order=order,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": snapshots_list})
+                return await process_tool_response(
+                    "list_universal_snapshots", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_universal_snapshots(
@@ -90,23 +119,16 @@ async def list_universal_snapshots(
             data = json.loads(results.data.decode("utf-8"))
             snapshots_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": snapshots_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": snapshots_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_universal_snapshots",
-            params={
-                "type": type,
-                "ticker_any_of": ticker_any_of,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_universal_snapshots", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 

@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -37,24 +37,58 @@ async def list_futures_aggregates(
     Example: list_futures_aggregates("ES", "day", fetch_all=True)
     """
     try:
-        aggregates_list = []
+        tool_params = {
+            "ticker": ticker,
+            "resolution": resolution,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            aggregates_list = await fetcher.fetch_all(
-                method_name="list_futures_aggregates",
-                ticker=ticker,
-                resolution=resolution,
-                window_start=window_start,
-                window_start_lt=window_start_lt,
-                window_start_lte=window_start_lte,
-                window_start_gt=window_start_gt,
-                window_start_gte=window_start_gte,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_aggregates", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_aggregates",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    resolution=resolution,
+                    window_start=window_start,
+                    window_start_lt=window_start_lt,
+                    window_start_lte=window_start_lte,
+                    window_start_gt=window_start_gt,
+                    window_start_gte=window_start_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                aggregates_list = await fetcher.fetch_all(
+                    method_name="list_futures_aggregates",
+                    ticker=ticker,
+                    resolution=resolution,
+                    window_start=window_start,
+                    window_start_lt=window_start_lt,
+                    window_start_lte=window_start_lte,
+                    window_start_gt=window_start_gt,
+                    window_start_gte=window_start_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": aggregates_list})
+                return await process_tool_response(
+                    "list_futures_aggregates", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_aggregates(
@@ -76,23 +110,16 @@ async def list_futures_aggregates(
             data = json.loads(results.data.decode("utf-8"))
             aggregates_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": aggregates_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": aggregates_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_aggregates",
-            params={
-                "ticker": ticker,
-                "resolution": resolution,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_aggregates", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -124,23 +151,56 @@ async def list_futures_contracts(
     Example: list_futures_contracts(product_code="ES", fetch_all=True)
     """
     try:
-        contracts_list = []
+        tool_params = {
+            "product_code": product_code,
+            "active": active,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            contracts_list = await fetcher.fetch_all(
-                method_name="list_futures_contracts",
-                product_code=product_code,
-                first_trade_date=first_trade_date,
-                last_trade_date=last_trade_date,
-                as_of=as_of,
-                active=active,
-                type=type,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_contracts", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_contracts",
+                    batch_callback=batch_callback,
+                    product_code=product_code,
+                    first_trade_date=first_trade_date,
+                    last_trade_date=last_trade_date,
+                    as_of=as_of,
+                    active=active,
+                    type=type,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                contracts_list = await fetcher.fetch_all(
+                    method_name="list_futures_contracts",
+                    product_code=product_code,
+                    first_trade_date=first_trade_date,
+                    last_trade_date=last_trade_date,
+                    as_of=as_of,
+                    active=active,
+                    type=type,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": contracts_list})
+                return await process_tool_response(
+                    "list_futures_contracts", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_contracts(
@@ -161,23 +221,16 @@ async def list_futures_contracts(
             data = json.loads(results.data.decode("utf-8"))
             contracts_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": contracts_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": contracts_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_contracts",
-            params={
-                "product_code": product_code,
-                "active": active,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_contracts", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -235,26 +288,62 @@ async def list_futures_products(
     Example: list_futures_products(sector="energy", fetch_all=True)
     """
     try:
-        products_list = []
+        tool_params = {
+            "sector": sector,
+            "asset_class": asset_class,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            products_list = await fetcher.fetch_all(
-                method_name="list_futures_products",
-                name=name,
-                name_search=name_search,
-                as_of=as_of,
-                trading_venue=trading_venue,
-                sector=sector,
-                sub_sector=sub_sector,
-                asset_class=asset_class,
-                asset_sub_class=asset_sub_class,
-                type=type,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_products", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_products",
+                    batch_callback=batch_callback,
+                    name=name,
+                    name_search=name_search,
+                    as_of=as_of,
+                    trading_venue=trading_venue,
+                    sector=sector,
+                    sub_sector=sub_sector,
+                    asset_class=asset_class,
+                    asset_sub_class=asset_sub_class,
+                    type=type,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                products_list = await fetcher.fetch_all(
+                    method_name="list_futures_products",
+                    name=name,
+                    name_search=name_search,
+                    as_of=as_of,
+                    trading_venue=trading_venue,
+                    sector=sector,
+                    sub_sector=sub_sector,
+                    asset_class=asset_class,
+                    asset_sub_class=asset_sub_class,
+                    type=type,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": products_list})
+                return await process_tool_response(
+                    "list_futures_products", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_products(
@@ -278,23 +367,16 @@ async def list_futures_products(
             data = json.loads(results.data.decode("utf-8"))
             products_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": products_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": products_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_products",
-            params={
-                "sector": sector,
-                "asset_class": asset_class,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_products", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -349,19 +431,48 @@ async def list_futures_schedules(
     Example: list_futures_schedules(session_end_date="2025-01-15", fetch_all=True)
     """
     try:
-        schedules_list = []
+        tool_params = {
+            "session_end_date": session_end_date,
+            "trading_venue": trading_venue,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            schedules_list = await fetcher.fetch_all(
-                method_name="list_futures_schedules",
-                session_end_date=session_end_date,
-                trading_venue=trading_venue,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_schedules", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_schedules",
+                    batch_callback=batch_callback,
+                    session_end_date=session_end_date,
+                    trading_venue=trading_venue,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                schedules_list = await fetcher.fetch_all(
+                    method_name="list_futures_schedules",
+                    session_end_date=session_end_date,
+                    trading_venue=trading_venue,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": schedules_list})
+                return await process_tool_response(
+                    "list_futures_schedules", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules(
@@ -378,23 +489,16 @@ async def list_futures_schedules(
             data = json.loads(results.data.decode("utf-8"))
             schedules_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": schedules_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": schedules_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_schedules",
-            params={
-                "session_end_date": session_end_date,
-                "trading_venue": trading_venue,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_schedules", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -426,23 +530,55 @@ async def list_futures_schedules_by_product_code(
     Example: list_futures_schedules_by_product_code("ES", fetch_all=True)
     """
     try:
-        schedules_list = []
+        tool_params = {
+            "product_code": product_code,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            schedules_list = await fetcher.fetch_all(
-                method_name="list_futures_schedules_by_product_code",
-                product_code=product_code,
-                session_end_date=session_end_date,
-                session_end_date_lt=session_end_date_lt,
-                session_end_date_lte=session_end_date_lte,
-                session_end_date_gt=session_end_date_gt,
-                session_end_date_gte=session_end_date_gte,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_schedules_by_product_code", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_schedules_by_product_code",
+                    batch_callback=batch_callback,
+                    product_code=product_code,
+                    session_end_date=session_end_date,
+                    session_end_date_lt=session_end_date_lt,
+                    session_end_date_lte=session_end_date_lte,
+                    session_end_date_gt=session_end_date_gt,
+                    session_end_date_gte=session_end_date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                schedules_list = await fetcher.fetch_all(
+                    method_name="list_futures_schedules_by_product_code",
+                    product_code=product_code,
+                    session_end_date=session_end_date,
+                    session_end_date_lt=session_end_date_lt,
+                    session_end_date_lte=session_end_date_lte,
+                    session_end_date_gt=session_end_date_gt,
+                    session_end_date_gte=session_end_date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": schedules_list})
+                return await process_tool_response(
+                    "list_futures_schedules_by_product_code", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_schedules_by_product_code(
@@ -463,22 +599,16 @@ async def list_futures_schedules_by_product_code(
             data = json.loads(results.data.decode("utf-8"))
             schedules_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": schedules_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": schedules_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_schedules_by_product_code",
-            params={
-                "product_code": product_code,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_schedules_by_product_code", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -506,19 +636,47 @@ async def list_futures_market_statuses(
     Example: list_futures_market_statuses(product_code="ES", fetch_all=True)
     """
     try:
-        statuses_list = []
+        tool_params = {
+            "product_code": product_code,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            statuses_list = await fetcher.fetch_all(
-                method_name="list_futures_market_statuses",
-                product_code_any_of=product_code_any_of,
-                product_code=product_code,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_futures_market_statuses", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_futures_market_statuses",
+                    batch_callback=batch_callback,
+                    product_code_any_of=product_code_any_of,
+                    product_code=product_code,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                statuses_list = await fetcher.fetch_all(
+                    method_name="list_futures_market_statuses",
+                    product_code_any_of=product_code_any_of,
+                    product_code=product_code,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": statuses_list})
+                return await process_tool_response(
+                    "list_futures_market_statuses", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_futures_market_statuses(
@@ -535,22 +693,16 @@ async def list_futures_market_statuses(
             data = json.loads(results.data.decode("utf-8"))
             statuses_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": statuses_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": statuses_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_futures_market_statuses",
-            params={
-                "product_code": product_code,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_futures_market_statuses", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 

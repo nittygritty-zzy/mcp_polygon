@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -105,7 +105,12 @@ async def list_tickers(
     Returns: ticker, name, market, type, active, primary_exchange, currency, cik.
     """
     try:
-        tickers_list = []
+        tool_params = {
+            "market": market,
+            "active": active,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -122,25 +127,54 @@ async def list_tickers(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            tickers_list = await fetcher.fetch_all(
-                method_name="list_tickers",
-                ticker=ticker,
-                type=type,
-                market=market,
-                exchange=exchange,
-                cusip=cusip,
-                cik=cik,
-                date=date,
-                search=search,
-                active=active,
-                sort=sort,
-                order=order,
-                limit=limit,
-                params=param_dict,
-            )
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("list_tickers", tool_params)
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_tickers",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    type=type,
+                    market=market,
+                    exchange=exchange,
+                    cusip=cusip,
+                    cik=cik,
+                    date=date,
+                    search=search,
+                    active=active,
+                    sort=sort,
+                    order=order,
+                    limit=limit,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                tickers_list = await fetcher.fetch_all(
+                    method_name="list_tickers",
+                    ticker=ticker,
+                    type=type,
+                    market=market,
+                    exchange=exchange,
+                    cusip=cusip,
+                    cik=cik,
+                    date=date,
+                    search=search,
+                    active=active,
+                    sort=sort,
+                    order=order,
+                    limit=limit,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": tickers_list})
+                return await process_tool_response(
+                    "list_tickers", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_tickers(
@@ -165,23 +199,14 @@ async def list_tickers(
             data = json.loads(results.data.decode("utf-8"))
             tickers_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": tickers_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": tickers_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_tickers",
-            params={
-                "market": market,
-                "active": active,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_tickers", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -214,22 +239,53 @@ async def get_all_tickers(
     Example: get_all_tickers(market="crypto", fetch_all=True)
     """
     try:
-        tickers_list = []
+        tool_params = {
+            "market": market,
+            "type": type,
+            "active": active,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            tickers_list = await fetcher.fetch_all(
-                method_name="list_tickers",
-                market=market,
-                type=type,
-                active=active,
-                sort=sort,
-                order=order,
-                limit=limit,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "get_all_tickers", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_tickers",
+                    batch_callback=batch_callback,
+                    market=market,
+                    type=type,
+                    active=active,
+                    sort=sort,
+                    order=order,
+                    limit=limit,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                tickers_list = await fetcher.fetch_all(
+                    method_name="list_tickers",
+                    market=market,
+                    type=type,
+                    active=active,
+                    sort=sort,
+                    order=order,
+                    limit=limit,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": tickers_list})
+                return await process_tool_response(
+                    "get_all_tickers", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_tickers(
@@ -248,24 +304,14 @@ async def get_all_tickers(
             data = json.loads(results.data.decode("utf-8"))
             tickers_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": tickers_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": tickers_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_all_tickers",
-            params={
-                "market": market,
-                "type": type,
-                "active": active,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("get_all_tickers", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 

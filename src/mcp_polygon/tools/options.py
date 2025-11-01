@@ -8,7 +8,7 @@ from ..formatters import (
     json_to_csv,
     enrich_options_with_gex_and_advanced_greeks,
 )
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 import json
 
@@ -49,25 +49,60 @@ async def list_options_contracts(
     Returns: ticker (O:AAPL251219C00150000 format), strike, expiration, type, exercise style, shares per contract.
     """
     try:
-        contracts_list = []
+        tool_params = {
+            "underlying_ticker": underlying_ticker,
+            "contract_type": contract_type,
+            "expiration_date": str(expiration_date) if expiration_date else None,
+            "strike_price": strike_price,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            contracts_list = await fetcher.fetch_all(
-                method_name="list_options_contracts",
-                underlying_ticker=underlying_ticker,
-                contract_type=contract_type,
-                expiration_date=expiration_date,
-                as_of=as_of,
-                strike_price=strike_price,
-                expired=expired,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_options_contracts", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_options_contracts",
+                    batch_callback=batch_callback,
+                    underlying_ticker=underlying_ticker,
+                    contract_type=contract_type,
+                    expiration_date=expiration_date,
+                    as_of=as_of,
+                    strike_price=strike_price,
+                    expired=expired,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                contracts_list = await fetcher.fetch_all(
+                    method_name="list_options_contracts",
+                    underlying_ticker=underlying_ticker,
+                    contract_type=contract_type,
+                    expiration_date=expiration_date,
+                    as_of=as_of,
+                    strike_price=strike_price,
+                    expired=expired,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": contracts_list})
+                return await process_tool_response(
+                    "list_options_contracts", tool_params, csv_data
+                )
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_options_contracts(
@@ -88,25 +123,16 @@ async def list_options_contracts(
             data = json.loads(results.data.decode("utf-8"))
             contracts_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": contracts_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": contracts_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_options_contracts",
-            params={
-                "underlying_ticker": underlying_ticker,
-                "contract_type": contract_type,
-                "expiration_date": str(expiration_date) if expiration_date else None,
-                "strike_price": strike_price,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_options_contracts", tool_params, csv_data
+            )
 
     except Exception as e:
         return f"Error: {e}"
@@ -184,35 +210,72 @@ async def get_options_aggs(
     Returns: o, h, l, c, v, vw (VWAP), t (timestamp), n (trades). Times in ET. Gaps indicate no trading.
     """
     try:
-        aggs_list = []
+        tool_params = {
+            "options_ticker": options_ticker,
+            "multiplier": multiplier,
+            "timespan": timespan,
+            "from_": str(from_),
+            "to": str(to),
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use list approach for automatic pagination
-            aggs_data = polygon_client.get_aggs(
-                ticker=options_ticker,
-                multiplier=multiplier,
-                timespan=timespan,
-                from_=from_,
-                to=to,
-                adjusted=adjusted,
-                sort=sort,
-                limit=limit,
-                params=params,
-                raw=False,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "get_options_aggs", tool_params
             )
-            # Convert Agg objects to dict
-            for agg in aggs_data:
-                aggs_list.append(
-                    {
-                        "o": agg.open,
-                        "h": agg.high,
-                        "l": agg.low,
-                        "c": agg.close,
-                        "v": agg.volume,
-                        "vw": agg.vwap,
-                        "t": agg.timestamp,
-                        "n": agg.transactions,
-                    }
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="get_aggs",
+                    batch_callback=batch_callback,
+                    ticker=options_ticker,
+                    multiplier=multiplier,
+                    timespan=timespan,
+                    from_=from_,
+                    to=to,
+                    adjusted=adjusted,
+                    sort=sort,
+                    limit=limit,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                aggs_data = polygon_client.get_aggs(
+                    ticker=options_ticker,
+                    multiplier=multiplier,
+                    timespan=timespan,
+                    from_=from_,
+                    to=to,
+                    adjusted=adjusted,
+                    sort=sort,
+                    limit=limit,
+                    params=params,
+                    raw=False,
+                )
+                # Convert Agg objects to dict
+                aggs_list = []
+                for agg in aggs_data:
+                    aggs_list.append(
+                        {
+                            "o": agg.open,
+                            "h": agg.high,
+                            "l": agg.low,
+                            "c": agg.close,
+                            "v": agg.volume,
+                            "vw": agg.vwap,
+                            "t": agg.timestamp,
+                            "n": agg.transactions,
+                        }
+                    )
+                csv_data = json_to_csv({"results": aggs_list})
+                return await process_tool_response(
+                    "get_options_aggs", tool_params, csv_data
                 )
         else:
             # Single page approach
@@ -231,26 +294,16 @@ async def get_options_aggs(
             data = json.loads(results.data.decode("utf-8"))
             aggs_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": aggs_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": aggs_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="get_options_aggs",
-            params={
-                "options_ticker": options_ticker,
-                "multiplier": multiplier,
-                "timespan": timespan,
-                "from_": str(from_),
-                "to": str(to),
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "get_options_aggs", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -442,68 +495,103 @@ async def list_snapshot_options_chain(
     Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract. Includes GEX and advanced greeks.
     """
     try:
-        options_list = []
+        tool_params = {
+            "underlying_asset": underlying_asset,
+            "strike_price": strike_price,
+            "expiration_date": str(expiration_date) if expiration_date else None,
+            "contract_type": contract_type,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
+        param_dict = {
+            **(params or {}),
+            **{
+                k: v
+                for k, v in {
+                    "strike_price": strike_price,
+                    "expiration_date": expiration_date,
+                    "contract_type": contract_type,
+                    "strike_price.gte": strike_price_gte,
+                    "strike_price.gt": strike_price_gt,
+                    "strike_price.lte": strike_price_lte,
+                    "strike_price.lt": strike_price_lt,
+                    "expiration_date.gte": expiration_date_gte,
+                    "expiration_date.gt": expiration_date_gt,
+                    "expiration_date.lte": expiration_date_lte,
+                    "expiration_date.lt": expiration_date_lt,
+                    "order": order,
+                    "limit": limit,
+                    "sort": sort,
+                }.items()
+                if v is not None
+            },
+        }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            param_dict = {
-                **(params or {}),
-                **{
-                    k: v
-                    for k, v in {
-                        "strike_price": strike_price,
-                        "expiration_date": expiration_date,
-                        "contract_type": contract_type,
-                        "strike_price.gte": strike_price_gte,
-                        "strike_price.gt": strike_price_gt,
-                        "strike_price.lte": strike_price_lte,
-                        "strike_price.lt": strike_price_lt,
-                        "expiration_date.gte": expiration_date_gte,
-                        "expiration_date.gt": expiration_date_gt,
-                        "expiration_date.lte": expiration_date_lte,
-                        "expiration_date.lt": expiration_date_lt,
-                        "order": order,
-                        "limit": limit,
-                        "sort": sort,
-                    }.items()
-                    if v is not None
-                },
-            }
-
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            options_list = await fetcher.fetch_all(
-                method_name="list_snapshot_options_chain",
-                underlying_asset=underlying_asset,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_snapshot_options_chain", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_snapshot_options_chain",
+                    batch_callback=batch_callback,
+                    underlying_asset=underlying_asset,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                options_list = await fetcher.fetch_all(
+                    method_name="list_snapshot_options_chain",
+                    underlying_asset=underlying_asset,
+                    params=param_dict,
+                )
+                # Get current stock price by fetching the underlying ticker snapshot
+                stock_price = None
+                try:
+                    snapshot_result = polygon_client.get_snapshot_ticker(
+                        market_type="stocks",
+                        ticker=underlying_asset,
+                        raw=True,
+                    )
+                    snapshot_data = json.loads(snapshot_result.data.decode("utf-8"))
+                    if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
+                        stock_price = snapshot_data["ticker"]["day"].get("c")
+                    if (
+                        not stock_price
+                        and "ticker" in snapshot_data
+                        and "prevDay" in snapshot_data["ticker"]
+                    ):
+                        stock_price = snapshot_data["ticker"]["prevDay"].get("c")
+                except Exception as e:
+                    import sys
+
+                    print(
+                        f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
+                        file=sys.stderr,
+                    )
+                # Enrich options data with GEX and advanced Greeks
+                if stock_price and options_list:
+                    enriched_options = enrich_options_with_gex_and_advanced_greeks(
+                        options_list, stock_price
+                    )
+                    options_list = enriched_options
+                csv_data = json_to_csv({"results": options_list})
+                return await process_tool_response(
+                    "list_snapshot_options_chain", tool_params, csv_data
+                )
         else:
             # Single page approach (existing behavior)
             results = polygon_client.list_snapshot_options_chain(
                 underlying_asset=underlying_asset,
-                params={
-                    **(params or {}),
-                    **{
-                        k: v
-                        for k, v in {
-                            "strike_price": strike_price,
-                            "expiration_date": expiration_date,
-                            "contract_type": contract_type,
-                            "strike_price.gte": strike_price_gte,
-                            "strike_price.gt": strike_price_gt,
-                            "strike_price.lte": strike_price_lte,
-                            "strike_price.lt": strike_price_lt,
-                            "expiration_date.gte": expiration_date_gte,
-                            "expiration_date.gt": expiration_date_gt,
-                            "expiration_date.lte": expiration_date_lte,
-                            "expiration_date.lt": expiration_date_lt,
-                            "order": order,
-                            "limit": limit,
-                            "sort": sort,
-                        }.items()
-                        if v is not None
-                    },
-                },
+                params=param_dict,
                 raw=True,
             )
 
@@ -511,59 +599,48 @@ async def list_snapshot_options_chain(
             data = json.loads(results.data.decode("utf-8"))
             options_list = data.get("results", [])
 
-        # Get current stock price by fetching the underlying ticker snapshot
-        stock_price = None
-        try:
-            snapshot_result = polygon_client.get_snapshot_ticker(
-                market_type="stocks",
-                ticker=underlying_asset,
-                raw=True,
+            # Get current stock price by fetching the underlying ticker snapshot
+            stock_price = None
+            try:
+                snapshot_result = polygon_client.get_snapshot_ticker(
+                    market_type="stocks",
+                    ticker=underlying_asset,
+                    raw=True,
+                )
+                snapshot_data = json.loads(snapshot_result.data.decode("utf-8"))
+                if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
+                    stock_price = snapshot_data["ticker"]["day"].get("c")
+                if (
+                    not stock_price
+                    and "ticker" in snapshot_data
+                    and "prevDay" in snapshot_data["ticker"]
+                ):
+                    stock_price = snapshot_data["ticker"]["prevDay"].get("c")
+            except Exception as e:
+                import sys
+
+                print(
+                    f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
+                    file=sys.stderr,
+                )
+
+            # Enrich options data with GEX and advanced Greeks
+            if stock_price and options_list:
+                enriched_options = enrich_options_with_gex_and_advanced_greeks(
+                    options_list, stock_price
+                )
+                options_list = enriched_options
+
+            # Create data structure for JSON to CSV conversion
+            data = {"results": options_list, "status": "OK"}
+
+            # Convert to CSV
+            csv_data = json_to_csv(data)
+
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_snapshot_options_chain", tool_params, csv_data
             )
-            snapshot_data = json.loads(snapshot_result.data.decode("utf-8"))
-            if "ticker" in snapshot_data and "day" in snapshot_data["ticker"]:
-                stock_price = snapshot_data["ticker"]["day"].get("c")  # Closing price
-            # Fallback: try prevDay close if day close not available
-            if (
-                not stock_price
-                and "ticker" in snapshot_data
-                and "prevDay" in snapshot_data["ticker"]
-            ):
-                stock_price = snapshot_data["ticker"]["prevDay"].get("c")
-        except Exception as e:
-            # If we can't get the stock price, continue without enrichment
-            import sys
-
-            print(
-                f"Warning: Could not fetch stock price for {underlying_asset}: {e}",
-                file=sys.stderr,
-            )
-
-        # Enrich options data with GEX and advanced Greeks
-        if stock_price and options_list:
-            enriched_options = enrich_options_with_gex_and_advanced_greeks(
-                options_list, stock_price
-            )
-            options_list = enriched_options
-
-        # Create data structure for JSON to CSV conversion
-        data = {"results": options_list, "status": "OK"}
-
-        # Convert to CSV
-        csv_data = json_to_csv(data)
-
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_snapshot_options_chain",
-            params={
-                "underlying_asset": underlying_asset,
-                "strike_price": strike_price,
-                "expiration_date": str(expiration_date) if expiration_date else None,
-                "contract_type": contract_type,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
 
     except Exception as e:
         return f"Error: {e}"

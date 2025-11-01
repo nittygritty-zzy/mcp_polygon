@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -41,23 +41,55 @@ async def list_treasury_yields(
     Returns: yield_1_month through yield_30_year. Inverted curve (short > long) signals recession risk.
     """
     try:
-        yields_list = []
+        tool_params = {
+            "date_gte": date_gte,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            yields_list = await fetcher.fetch_all(
-                method_name="list_treasury_yields",
-                date=date,
-                date_lt=date_lt,
-                date_lte=date_lte,
-                date_gt=date_gt,
-                date_gte=date_gte,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_treasury_yields", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_treasury_yields",
+                    batch_callback=batch_callback,
+                    date=date,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                yields_list = await fetcher.fetch_all(
+                    method_name="list_treasury_yields",
+                    date=date,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": yields_list})
+                return await process_tool_response(
+                    "list_treasury_yields", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_treasury_yields(
@@ -78,22 +110,16 @@ async def list_treasury_yields(
             data = json.loads(results.data.decode("utf-8"))
             yields_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": yields_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": yields_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_treasury_yields",
-            params={
-                "date_gte": date_gte,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_treasury_yields", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -129,23 +155,55 @@ async def list_inflation(
     Returns: CPI, CPI Core, PCE, PCE Core (Fed's preferred measure), YoY changes. Fed targets 2% PCE Core.
     """
     try:
-        inflation_list = []
+        tool_params = {
+            "date_gte": date_gte,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            inflation_list = await fetcher.fetch_all(
-                method_name="list_inflation",
-                date=date,
-                date_any_of=date_any_of,
-                date_gt=date_gt,
-                date_gte=date_gte,
-                date_lt=date_lt,
-                date_lte=date_lte,
-                limit=limit,
-                sort=sort,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_inflation", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_inflation",
+                    batch_callback=batch_callback,
+                    date=date,
+                    date_any_of=date_any_of,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                inflation_list = await fetcher.fetch_all(
+                    method_name="list_inflation",
+                    date=date,
+                    date_any_of=date_any_of,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": inflation_list})
+                return await process_tool_response(
+                    "list_inflation", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_inflation(
@@ -166,22 +224,14 @@ async def list_inflation(
             data = json.loads(results.data.decode("utf-8"))
             inflation_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": inflation_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": inflation_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_inflation",
-            params={
-                "date_gte": date_gte,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_inflation", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -217,6 +267,12 @@ async def list_inflation_expectations(
     Returns: market_5_year, market_10_year (TIPS breakeven), model_1/5/10/30_year (Cleveland Fed), forward_years_5_to_10.
     """
     try:
+        tool_params = {
+            "date_gte": date_gte,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         # Build the params dictionary
         request_params = params or {}
         if date:
@@ -234,25 +290,49 @@ async def list_inflation_expectations(
         if sort:
             request_params["sort"] = sort
 
-        expectations_list = []
-
         if fetch_all:
-            # Use maximum limit for fetching all data
-            request_params["limit"] = 50000
-
-            # Make the request to the inflation expectations endpoint
-            results = polygon_client._get(
-                "/fed/v1/inflation-expectations", params=request_params
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_inflation_expectations", tool_params
             )
 
-            import json
-
-            if isinstance(results, str):
-                data = json.loads(results)
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_inflation_expectations",
+                    batch_callback=batch_callback,
+                    date=date,
+                    date_any_of=date_any_of,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    limit=limit,
+                    sort=sort,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
             else:
-                data = results
+                # Memory mode (fallback if batch writing not available)
+                request_params["limit"] = 50000
+                results = polygon_client._get(
+                    "/fed/v1/inflation-expectations", params=request_params
+                )
 
-            expectations_list = data.get("results", [])
+                import json
+
+                if isinstance(results, str):
+                    data = json.loads(results)
+                else:
+                    data = results
+
+                expectations_list = data.get("results", [])
+                csv_data = json_to_csv({"results": expectations_list})
+                return await process_tool_response(
+                    "list_inflation_expectations", tool_params, csv_data
+                )
         else:
             # Single page approach with specified limit
             request_params["limit"] = limit
@@ -271,21 +351,15 @@ async def list_inflation_expectations(
 
             expectations_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": expectations_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": expectations_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_inflation_expectations",
-            params={
-                "date_gte": date_gte,
-                "limit": limit if not fetch_all else 50000,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_inflation_expectations", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"

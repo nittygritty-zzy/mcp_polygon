@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -49,7 +49,12 @@ async def list_ticker_news(
     Note: Articles include full content with sentiment analysis and AI-generated insights.
     """
     try:
-        news_list = []
+        tool_params = {
+            "ticker": ticker,
+            "published_utc_gte": str(published_utc_gte) if published_utc_gte else None,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -70,18 +75,42 @@ async def list_ticker_news(
         }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            news_list = await fetcher.fetch_all(
-                method_name="list_ticker_news",
-                ticker=ticker,
-                published_utc=published_utc,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_ticker_news", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_ticker_news",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    published_utc=published_utc,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                news_list = await fetcher.fetch_all(
+                    method_name="list_ticker_news",
+                    ticker=ticker,
+                    published_utc=published_utc,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": news_list})
+                return await process_tool_response(
+                    "list_ticker_news", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_ticker_news(
@@ -99,24 +128,15 @@ async def list_ticker_news(
             data = json.loads(results.data.decode("utf-8"))
             news_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": news_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": news_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_ticker_news",
-            params={
-                "ticker": ticker,
-                "published_utc_gte": str(published_utc_gte)
-                if published_utc_gte
-                else None,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_ticker_news", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"

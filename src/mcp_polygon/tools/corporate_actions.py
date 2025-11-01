@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -49,7 +49,11 @@ async def list_splits(
     Returns: ticker, execution_date, split_to, split_from. Ratio: split_to-for-split_from (e.g., 2-for-1).
     """
     try:
-        splits_list = []
+        tool_params = {
+            "ticker": ticker,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -70,18 +74,40 @@ async def list_splits(
         }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            splits_list = await fetcher.fetch_all(
-                method_name="list_splits",
-                ticker=ticker,
-                execution_date=execution_date,
-                reverse_split=reverse_split,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=param_dict,
-            )
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("list_splits", tool_params)
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_splits",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    execution_date=execution_date,
+                    reverse_split=reverse_split,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                splits_list = await fetcher.fetch_all(
+                    method_name="list_splits",
+                    ticker=ticker,
+                    execution_date=execution_date,
+                    reverse_split=reverse_split,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": splits_list})
+                return await process_tool_response("list_splits", tool_params, csv_data)
         else:
             # Single page approach
             results = polygon_client.list_splits(
@@ -100,22 +126,14 @@ async def list_splits(
             data = json.loads(results.data.decode("utf-8"))
             splits_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": splits_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": splits_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_splits",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_splits", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -183,8 +201,6 @@ async def list_dividends(
     Returns: ticker, cash_amount, currency, declaration_date, ex_dividend_date, record_date, pay_date, frequency, dividend_type.
     """
     try:
-        dividends_list = []
-
         param_dict = {
             **(params or {}),
             **{
@@ -219,24 +235,61 @@ async def list_dividends(
             },
         }
 
+        tool_params = {
+            "ticker": ticker,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
+
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            dividends_list = await fetcher.fetch_all(
-                method_name="list_dividends",
-                ticker=ticker,
-                ex_dividend_date=ex_dividend_date,
-                record_date=record_date,
-                declaration_date=declaration_date,
-                pay_date=pay_date,
-                frequency=frequency,
-                cash_amount=cash_amount,
-                dividend_type=dividend_type,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_dividends", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_dividends",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    ex_dividend_date=ex_dividend_date,
+                    record_date=record_date,
+                    declaration_date=declaration_date,
+                    pay_date=pay_date,
+                    frequency=frequency,
+                    cash_amount=cash_amount,
+                    dividend_type=dividend_type,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                dividends_list = await fetcher.fetch_all(
+                    method_name="list_dividends",
+                    ticker=ticker,
+                    ex_dividend_date=ex_dividend_date,
+                    record_date=record_date,
+                    declaration_date=declaration_date,
+                    pay_date=pay_date,
+                    frequency=frequency,
+                    cash_amount=cash_amount,
+                    dividend_type=dividend_type,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": dividends_list})
+                return await process_tool_response(
+                    "list_dividends", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_dividends(
@@ -260,22 +313,14 @@ async def list_dividends(
             data = json.loads(results.data.decode("utf-8"))
             dividends_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": dividends_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": dividends_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_dividends",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_dividends", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"
 
@@ -360,29 +405,61 @@ async def list_ipos(
     Returns: ticker, issuer_name, listing_date, ipo_status, final_issue_price, offer prices, shares, total_offer_size.
     """
     try:
-        ipos_list = []
+        tool_params = {
+            "ipo_status": ipo_status,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            ipos_list = await fetcher.fetch_all(
-                method_name="list_ipos",
-                use_vx=True,
-                ticker=ticker,
-                us_code=us_code,
-                isin=isin,
-                listing_date=listing_date,
-                listing_date_lt=listing_date_lt,
-                listing_date_lte=listing_date_lte,
-                listing_date_gt=listing_date_gt,
-                listing_date_gte=listing_date_gte,
-                ipo_status=ipo_status,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=params,
-            )
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer("list_ipos", tool_params)
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_ipos",
+                    batch_callback=batch_callback,
+                    use_vx=True,
+                    ticker=ticker,
+                    us_code=us_code,
+                    isin=isin,
+                    listing_date=listing_date,
+                    listing_date_lt=listing_date_lt,
+                    listing_date_lte=listing_date_lte,
+                    listing_date_gt=listing_date_gt,
+                    listing_date_gte=listing_date_gte,
+                    ipo_status=ipo_status,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                ipos_list = await fetcher.fetch_all(
+                    method_name="list_ipos",
+                    use_vx=True,
+                    ticker=ticker,
+                    us_code=us_code,
+                    isin=isin,
+                    listing_date=listing_date,
+                    listing_date_lt=listing_date_lt,
+                    listing_date_lte=listing_date_lte,
+                    listing_date_gt=listing_date_gt,
+                    listing_date_gte=listing_date_gte,
+                    ipo_status=ipo_status,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": ipos_list})
+                return await process_tool_response("list_ipos", tool_params, csv_data)
         else:
             # Single page approach
             results = polygon_client.vx.list_ipos(
@@ -407,21 +484,13 @@ async def list_ipos(
             data = json.loads(results.data.decode("utf-8"))
             ipos_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": ipos_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": ipos_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_ipos",
-            params={
-                "ipo_status": ipo_status,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response("list_ipos", tool_params, csv_data)
     except Exception as e:
         return f"Error: {e}"

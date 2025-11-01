@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
-from ..tool_integration import process_tool_response
+from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 
 
@@ -58,37 +58,82 @@ async def list_stock_financials(
     and cash flow statement (operating, investing, financing activities) data from SEC filings.
     """
     try:
-        financials_list = []
+        tool_params = {
+            "ticker": ticker,
+            "timeframe": timeframe,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         if fetch_all:
-            # Use iterator approach for automatic pagination
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            financials_list = await fetcher.fetch_all(
-                method_name="list_stock_financials",
-                use_vx=True,
-                ticker=ticker,
-                cik=cik,
-                company_name=company_name,
-                company_name_search=company_name_search,
-                sic=sic,
-                filing_date=filing_date,
-                filing_date_lt=filing_date_lt,
-                filing_date_lte=filing_date_lte,
-                filing_date_gt=filing_date_gt,
-                filing_date_gte=filing_date_gte,
-                period_of_report_date=period_of_report_date,
-                period_of_report_date_lt=period_of_report_date_lt,
-                period_of_report_date_lte=period_of_report_date_lte,
-                period_of_report_date_gt=period_of_report_date_gt,
-                period_of_report_date_gte=period_of_report_date_gte,
-                timeframe=timeframe,
-                include_sources=include_sources,
-                limit=limit,
-                sort=sort,
-                order=order,
-                params=params,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_stock_financials", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_stock_financials",
+                    use_vx=True,
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    cik=cik,
+                    company_name=company_name,
+                    company_name_search=company_name_search,
+                    sic=sic,
+                    filing_date=filing_date,
+                    filing_date_lt=filing_date_lt,
+                    filing_date_lte=filing_date_lte,
+                    filing_date_gt=filing_date_gt,
+                    filing_date_gte=filing_date_gte,
+                    period_of_report_date=period_of_report_date,
+                    period_of_report_date_lt=period_of_report_date_lt,
+                    period_of_report_date_lte=period_of_report_date_lte,
+                    period_of_report_date_gt=period_of_report_date_gt,
+                    period_of_report_date_gte=period_of_report_date_gte,
+                    timeframe=timeframe,
+                    include_sources=include_sources,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                financials_list = await fetcher.fetch_all(
+                    method_name="list_stock_financials",
+                    use_vx=True,
+                    ticker=ticker,
+                    cik=cik,
+                    company_name=company_name,
+                    company_name_search=company_name_search,
+                    sic=sic,
+                    filing_date=filing_date,
+                    filing_date_lt=filing_date_lt,
+                    filing_date_lte=filing_date_lte,
+                    filing_date_gt=filing_date_gt,
+                    filing_date_gte=filing_date_gte,
+                    period_of_report_date=period_of_report_date,
+                    period_of_report_date_lt=period_of_report_date_lt,
+                    period_of_report_date_lte=period_of_report_date_lte,
+                    period_of_report_date_gt=period_of_report_date_gt,
+                    period_of_report_date_gte=period_of_report_date_gte,
+                    timeframe=timeframe,
+                    include_sources=include_sources,
+                    limit=limit,
+                    sort=sort,
+                    order=order,
+                    params=params,
+                )
+                csv_data = json_to_csv({"results": financials_list})
+                return await process_tool_response(
+                    "list_stock_financials", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.vx.list_stock_financials(
@@ -121,23 +166,16 @@ async def list_stock_financials(
             data = json.loads(results.data.decode("utf-8"))
             financials_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": financials_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": financials_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_stock_financials",
-            params={
-                "ticker": ticker,
-                "timeframe": timeframe,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_stock_financials", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -947,7 +985,11 @@ async def list_short_interest(
     Returns: short_interest, days_to_cover, avg_daily_volume, settlement_date. Formula: days_to_cover = short_interest ÷ avg_daily_volume. Bi-monthly FINRA snapshots.
     """
     try:
-        short_interest_list = []
+        tool_params = {
+            "ticker": ticker,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -978,20 +1020,48 @@ async def list_short_interest(
         }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            short_interest_list = await fetcher.fetch_all(
-                method_name="list_short_interest",
-                ticker=ticker,
-                settlement_date=settlement_date,
-                settlement_date_lt=settlement_date_lt,
-                settlement_date_lte=settlement_date_lte,
-                settlement_date_gt=settlement_date_gt,
-                settlement_date_gte=settlement_date_gte,
-                limit=limit,
-                sort=sort,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_short_interest", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_short_interest",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    settlement_date=settlement_date,
+                    settlement_date_lt=settlement_date_lt,
+                    settlement_date_lte=settlement_date_lte,
+                    settlement_date_gt=settlement_date_gt,
+                    settlement_date_gte=settlement_date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                short_interest_list = await fetcher.fetch_all(
+                    method_name="list_short_interest",
+                    ticker=ticker,
+                    settlement_date=settlement_date,
+                    settlement_date_lt=settlement_date_lt,
+                    settlement_date_lte=settlement_date_lte,
+                    settlement_date_gt=settlement_date_gt,
+                    settlement_date_gte=settlement_date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": short_interest_list})
+                return await process_tool_response(
+                    "list_short_interest", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_short_interest(
@@ -1012,22 +1082,16 @@ async def list_short_interest(
             data = json.loads(results.data.decode("utf-8"))
             short_interest_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": short_interest_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": short_interest_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_short_interest",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_short_interest", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
 
@@ -1084,7 +1148,11 @@ async def list_short_volume(
     Returns: short_volume, total_volume, short_volume_ratio, date. Formula: short_volume_ratio = (short_volume / total_volume) × 100. Daily FINRA transactions (T+1).
     """
     try:
-        short_volume_list = []
+        tool_params = {
+            "ticker": ticker,
+            "limit": limit,
+            "fetch_all": fetch_all,
+        }
 
         param_dict = {
             **(params or {}),
@@ -1115,20 +1183,48 @@ async def list_short_volume(
         }
 
         if fetch_all:
-            # Use parallel fetcher with 5 workers for maximum speed
-            fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-            short_volume_list = await fetcher.fetch_all(
-                method_name="list_short_volume",
-                ticker=ticker,
-                date=date,
-                date_lt=date_lt,
-                date_lte=date_lte,
-                date_gt=date_gt,
-                date_gte=date_gte,
-                limit=limit,
-                sort=sort,
-                params=param_dict,
+            # Use batch writing for memory efficiency
+            batch_callback, finalize = create_batch_writer(
+                "list_short_volume", tool_params
             )
+
+            if batch_callback:
+                # Streaming mode - write batches to disk incrementally
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                await fetcher.fetch_all(
+                    method_name="list_short_volume",
+                    batch_callback=batch_callback,
+                    ticker=ticker,
+                    date=date,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                # Finalize and return cache metadata
+                return await finalize()
+            else:
+                # Memory mode (fallback if batch writing not available)
+                fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
+                short_volume_list = await fetcher.fetch_all(
+                    method_name="list_short_volume",
+                    ticker=ticker,
+                    date=date,
+                    date_lt=date_lt,
+                    date_lte=date_lte,
+                    date_gt=date_gt,
+                    date_gte=date_gte,
+                    limit=limit,
+                    sort=sort,
+                    params=param_dict,
+                )
+                csv_data = json_to_csv({"results": short_volume_list})
+                return await process_tool_response(
+                    "list_short_volume", tool_params, csv_data
+                )
         else:
             # Single page approach
             results = polygon_client.list_short_volume(
@@ -1149,21 +1245,15 @@ async def list_short_volume(
             data = json.loads(results.data.decode("utf-8"))
             short_volume_list = data.get("results", [])
 
-        # Create data structure for JSON to CSV conversion
-        data = {"results": short_volume_list, "status": "OK"}
+            # Create data structure for JSON to CSV conversion
+            data = {"results": short_volume_list, "status": "OK"}
 
-        # Convert to CSV
-        csv_data = json_to_csv(data)
+            # Convert to CSV
+            csv_data = json_to_csv(data)
 
-        # Process with intelligent caching
-        return await process_tool_response(
-            tool_name="list_short_volume",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-                "fetch_all": fetch_all,
-            },
-            csv_data=csv_data,
-        )
+            # Process with intelligent caching
+            return await process_tool_response(
+                "list_short_volume", tool_params, csv_data
+            )
     except Exception as e:
         return f"Error: {e}"
