@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -50,13 +51,13 @@ async def get_sma(
     Returns: timestamp, value. Common windows: 50-day, 200-day. Golden Cross (50>200)=bullish, Death Cross (50<200)=bearish.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "window": window,
-            "timespan": timespan,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            window=window,
+            timespan=timespan,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
@@ -202,13 +203,13 @@ async def get_ema(
     Returns: timestamp, value. Common windows: 12, 26 (MACD components), 50, 200. More responsive than SMA.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "window": window,
-            "timespan": timespan,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            window=window,
+            timespan=timespan,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
@@ -357,15 +358,15 @@ async def get_macd(
     Returns: timestamp, value (MACD line), signal (signal line), histogram. Bullish: MACD crosses above signal.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "short_window": short_window,
-            "long_window": long_window,
-            "signal_window": signal_window,
-            "timespan": timespan,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            short_window=short_window,
+            long_window=long_window,
+            signal_window=signal_window,
+            timespan=timespan,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}
@@ -516,13 +517,13 @@ async def get_rsi(
     Returns: timestamp, value (RSI 0-100, <30 oversold, >70 overbought)
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "window": window,
-            "timespan": timespan,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            window=window,
+            timespan=timespan,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         # Build params dict for timestamp range filters
         final_params = {**(params or {})}

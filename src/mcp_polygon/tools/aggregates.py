@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -48,15 +49,15 @@ async def get_aggs(
     Note: Covers pre-market, regular, and after-hours sessions (ET). Use higher limits for longer ranges.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "multiplier": multiplier,
-            "timespan": timespan,
-            "from_": str(from_),
-            "to": str(to),
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=str(from_),
+            to=str(to),
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -159,15 +160,15 @@ async def list_aggs(
     RECOMMENDED: Always use fetch_all=True to cache complete OHLC data locally for efficient DuckDB analysis.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "multiplier": multiplier,
-            "timespan": timespan,
-            "from_": str(from_),
-            "to": str(to),
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=str(from_),
+            to=str(to),
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency

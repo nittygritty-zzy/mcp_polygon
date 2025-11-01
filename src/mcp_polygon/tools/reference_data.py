@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -105,12 +106,12 @@ async def list_tickers(
     Returns: ticker, name, market, type, active, primary_exchange, currency, cik.
     """
     try:
-        tool_params = {
-            "market": market,
-            "active": active,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            market=market,
+            active=active,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),
@@ -239,13 +240,13 @@ async def get_all_tickers(
     Example: get_all_tickers(market="crypto", fetch_all=True)
     """
     try:
-        tool_params = {
-            "market": market,
-            "type": type,
-            "active": active,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            market=market,
+            type=type,
+            active=active,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency

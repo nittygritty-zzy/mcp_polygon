@@ -10,6 +10,7 @@ from ..formatters import (
 )
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 import json
 
 
@@ -49,14 +50,14 @@ async def list_options_contracts(
     Returns: ticker (O:AAPL251219C00150000 format), strike, expiration, type, exercise style, shares per contract.
     """
     try:
-        tool_params = {
-            "underlying_ticker": underlying_ticker,
-            "contract_type": contract_type,
-            "expiration_date": str(expiration_date) if expiration_date else None,
-            "strike_price": strike_price,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            underlying_ticker=underlying_ticker,
+            contract_type=contract_type,
+            expiration_date=str(expiration_date) if expiration_date else None,
+            strike_price=strike_price,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -210,15 +211,15 @@ async def get_options_aggs(
     Returns: o, h, l, c, v, vw (VWAP), t (timestamp), n (trades). Times in ET. Gaps indicate no trading.
     """
     try:
-        tool_params = {
-            "options_ticker": options_ticker,
-            "multiplier": multiplier,
-            "timespan": timespan,
-            "from_": str(from_),
-            "to": str(to),
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            options_ticker=options_ticker,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=str(from_),
+            to=str(to),
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -495,14 +496,14 @@ async def list_snapshot_options_chain(
     Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract. Includes GEX and advanced greeks.
     """
     try:
-        tool_params = {
-            "underlying_asset": underlying_asset,
-            "strike_price": strike_price,
-            "expiration_date": str(expiration_date) if expiration_date else None,
-            "contract_type": contract_type,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            underlying_asset=underlying_asset,
+            strike_price=strike_price,
+            expiration_date=str(expiration_date) if expiration_date else None,
+            contract_type=contract_type,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),

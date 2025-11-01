@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -41,11 +42,11 @@ async def list_treasury_yields(
     Returns: yield_1_month through yield_30_year. Inverted curve (short > long) signals recession risk.
     """
     try:
-        tool_params = {
-            "date_gte": date_gte,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            date_gte=date_gte,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -155,11 +156,11 @@ async def list_inflation(
     Returns: CPI, CPI Core, PCE, PCE Core (Fed's preferred measure), YoY changes. Fed targets 2% PCE Core.
     """
     try:
-        tool_params = {
-            "date_gte": date_gte,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            date_gte=date_gte,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -267,11 +268,11 @@ async def list_inflation_expectations(
     Returns: market_5_year, market_10_year (TIPS breakeven), model_1/5/10/30_year (Cleveland Fed), forward_years_5_to_10.
     """
     try:
-        tool_params = {
-            "date_gte": date_gte,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            date_gte=date_gte,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         # Build the params dictionary
         request_params = params or {}

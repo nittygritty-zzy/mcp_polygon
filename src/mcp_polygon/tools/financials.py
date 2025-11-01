@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -58,12 +59,12 @@ async def list_stock_financials(
     and cash flow statement (operating, investing, financing activities) data from SEC filings.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "timeframe": timeframe,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            timeframe=timeframe,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -298,11 +299,11 @@ async def list_financials_balance_sheets(
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_financials_balance_sheets",
-            params={
-                "tickers": tickers,
-                "timeframe": timeframe,
-                "limit": limit,
-            },
+            params=build_params(
+                tickers=tickers,
+                timeframe=timeframe,
+                limit=limit,
+            ),
             csv_data=csv_data,
         )
     except Exception as e:
@@ -427,11 +428,11 @@ async def list_financials_cash_flow_statements(
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_financials_cash_flow_statements",
-            params={
-                "tickers": tickers,
-                "timeframe": timeframe,
-                "limit": limit,
-            },
+            params=build_params(
+                tickers=tickers,
+                timeframe=timeframe,
+                limit=limit,
+            ),
             csv_data=csv_data,
         )
     except Exception as e:
@@ -556,11 +557,11 @@ async def list_financials_income_statements(
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_financials_income_statements",
-            params={
-                "tickers": tickers,
-                "timeframe": timeframe,
-                "limit": limit,
-            },
+            params=build_params(
+                tickers=tickers,
+                timeframe=timeframe,
+                limit=limit,
+            ),
             csv_data=csv_data,
         )
     except Exception as e:
@@ -641,10 +642,10 @@ async def list_financials_ratios(
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_financials_ratios",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-            },
+            params=build_params(
+                ticker=ticker,
+                limit=limit,
+            ),
             csv_data=csv_data,
         )
     except Exception as e:
@@ -923,10 +924,10 @@ async def list_stock_ratios(
         # Process with intelligent caching
         return await process_tool_response(
             tool_name="list_stock_ratios",
-            params={
-                "ticker": ticker,
-                "limit": limit,
-            },
+            params=build_params(
+                ticker=ticker,
+                limit=limit,
+            ),
             csv_data=csv_data,
         )
     except Exception as e:
@@ -985,11 +986,11 @@ async def list_short_interest(
     Returns: short_interest, days_to_cover, avg_daily_volume, settlement_date. Formula: days_to_cover = short_interest ÷ avg_daily_volume. Bi-monthly FINRA snapshots.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),
@@ -1148,11 +1149,11 @@ async def list_short_volume(
     Returns: short_volume, total_volume, short_volume_ratio, date. Formula: short_volume_ratio = (short_volume / total_volume) × 100. Daily FINRA transactions (T+1).
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),

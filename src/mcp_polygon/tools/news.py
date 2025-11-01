@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -49,12 +50,12 @@ async def list_ticker_news(
     Note: Articles include full content with sentiment analysis and AI-generated insights.
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "published_utc_gte": str(published_utc_gte) if published_utc_gte else None,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            published_utc_gte=str(published_utc_gte) if published_utc_gte else None,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),

@@ -6,6 +6,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -43,12 +44,12 @@ async def list_universal_snapshots(
     Returns: ticker, type, market_status, last_trade, last_quote. Stocks include session data, options include greeks/IV.
     """
     try:
-        tool_params = {
-            "type": type,
-            "ticker_any_of": ticker_any_of,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            type=type,
+            ticker_any_of=ticker_any_of,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),

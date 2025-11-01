@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -37,13 +38,12 @@ async def list_futures_aggregates(
     Example: list_futures_aggregates("ES", "day", fetch_all=True)
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "resolution": resolution,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            ticker=ticker,
+            resolution=resolution,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(
@@ -151,13 +151,12 @@ async def list_futures_contracts(
     Example: list_futures_contracts(product_code="ES", fetch_all=True)
     """
     try:
-        tool_params = {
-            "product_code": product_code,
-            "active": active,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            product_code=product_code,
+            active=active,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(
@@ -288,13 +287,12 @@ async def list_futures_products(
     Example: list_futures_products(sector="energy", fetch_all=True)
     """
     try:
-        tool_params = {
-            "sector": sector,
-            "asset_class": asset_class,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            sector=sector,
+            asset_class=asset_class,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(
@@ -431,13 +429,12 @@ async def list_futures_schedules(
     Example: list_futures_schedules(session_end_date="2025-01-15", fetch_all=True)
     """
     try:
-        tool_params = {
-            "session_end_date": session_end_date,
-            "trading_venue": trading_venue,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            session_end_date=session_end_date,
+            trading_venue=trading_venue,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(
@@ -530,12 +527,11 @@ async def list_futures_schedules_by_product_code(
     Example: list_futures_schedules_by_product_code("ES", fetch_all=True)
     """
     try:
-        tool_params = {
-            "product_code": product_code,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            product_code=product_code,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(
@@ -636,12 +632,11 @@ async def list_futures_market_statuses(
     Example: list_futures_market_statuses(product_code="ES", fetch_all=True)
     """
     try:
-        tool_params = {
-            "product_code": product_code,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
-
+        tool_params = build_params(
+            product_code=product_code,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
         if fetch_all:
             # Use batch writing for memory efficiency
             batch_callback, finalize = create_batch_writer(

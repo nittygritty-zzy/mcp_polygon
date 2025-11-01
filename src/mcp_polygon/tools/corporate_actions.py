@@ -7,6 +7,7 @@ from ..clients import poly_mcp, polygon_client
 from ..formatters import json_to_csv
 from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
+from ..utils import build_params
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -49,11 +50,11 @@ async def list_splits(
     Returns: ticker, execution_date, split_to, split_from. Ratio: split_to-for-split_from (e.g., 2-for-1).
     """
     try:
-        tool_params = {
-            "ticker": ticker,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         param_dict = {
             **(params or {}),
@@ -235,11 +236,11 @@ async def list_dividends(
             },
         }
 
-        tool_params = {
-            "ticker": ticker,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ticker=ticker,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
@@ -405,11 +406,11 @@ async def list_ipos(
     Returns: ticker, issuer_name, listing_date, ipo_status, final_issue_price, offer prices, shares, total_offer_size.
     """
     try:
-        tool_params = {
-            "ipo_status": ipo_status,
-            "limit": limit,
-            "fetch_all": fetch_all,
-        }
+        tool_params = build_params(
+            ipo_status=ipo_status,
+            limit=limit,
+            fetch_all=fetch_all,
+        )
 
         if fetch_all:
             # Use batch writing for memory efficiency
