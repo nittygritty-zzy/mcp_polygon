@@ -1,6 +1,6 @@
 """Auto-generated tool definitions."""
 
-from typing import Optional, Any, Dict, Union
+from typing import Optional, Any, Dict, Union, List
 from mcp.types import ToolAnnotations
 from datetime import datetime, date
 from ..clients import poly_mcp, polygon_client
@@ -12,6 +12,40 @@ from ..tool_integration import process_tool_response, create_batch_writer
 from ..parallel_fetcher import PolygonParallelFetcher
 from ..utils import build_params
 import json
+
+
+async def _fetch_both_contract_types(
+    fetch_func,
+    method_name: str,
+    **kwargs,
+) -> List[Dict[str, Any]]:
+    """
+    Helper to fetch both calls and puts when contract_type is None with fetch_all=True.
+
+    Args:
+        fetch_func: The fetch function to call (either fetcher.fetch_all or polygon_client method)
+        method_name: Name of the method being called
+        **kwargs: Parameters to pass to the fetch function
+
+    Returns:
+        Combined list of calls and puts
+    """
+    # Fetch calls
+    calls = await fetch_func(
+        method_name=method_name,
+        **{**kwargs, "contract_type": "call"},
+    )
+
+    # Fetch puts
+    puts = await fetch_func(
+        method_name=method_name,
+        **{**kwargs, "contract_type": "put"},
+    )
+
+    # Combine results
+    if isinstance(calls, list) and isinstance(puts, list):
+        return calls + puts
+    return []
 
 
 @poly_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -35,7 +69,7 @@ async def list_options_contracts(
 
     Parameters:
     - underlying_ticker: Filter by stock (e.g., "AAPL", "TSLA")
-    - contract_type: Filter by type ("call", "put")
+    - contract_type: Filter by type ("call", "put", or None for BOTH)
     - expiration_date: Filter by expiration (YYYY-MM-DD)
     - strike_price: Filter by strike price
     - limit: Number of results per page (default: 10, max: 1000)
@@ -44,7 +78,10 @@ async def list_options_contracts(
 
     RECOMMENDED: Always use fetch_all=True to cache complete data locally for efficient DuckDB analysis.
 
-    Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", fetch_all=True)
+    DEFAULT BEHAVIOR with fetch_all=True: When contract_type is None, automatically fetches BOTH calls and puts.
+
+    Example: list_options_contracts(underlying_ticker="AAPL", fetch_all=True)  # Gets both calls and puts
+    Example: list_options_contracts(underlying_ticker="AAPL", contract_type="call", fetch_all=True)  # Only calls
     Example: list_options_contracts(underlying_ticker="TSLA", params={"expiration_date.gte": "2025-06-01"}, fetch_all=True)
 
     Returns: ticker (O:AAPL251219C00150000 format), strike, expiration, type, exercise style, shares per contract.
@@ -68,38 +105,111 @@ async def list_options_contracts(
             if batch_callback:
                 # Streaming mode - write batches to disk incrementally
                 fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-                await fetcher.fetch_all(
-                    method_name="list_options_contracts",
-                    batch_callback=batch_callback,
-                    underlying_ticker=underlying_ticker,
-                    contract_type=contract_type,
-                    expiration_date=expiration_date,
-                    as_of=as_of,
-                    strike_price=strike_price,
-                    expired=expired,
-                    limit=limit,
-                    sort=sort,
-                    order=order,
-                    params=params,
-                )
+
+                if contract_type is None:
+                    # Fetch both calls and puts
+                    batch_counter = 0
+
+                    # Wrapper to track batch count for calls
+                    async def calls_callback(batch_num, data):
+                        nonlocal batch_counter
+                        batch_counter = max(batch_counter, batch_num + 1)
+                        await batch_callback(batch_num, data)
+
+                    # Fetch calls
+                    await fetcher.fetch_all(
+                        method_name="list_options_contracts",
+                        batch_callback=calls_callback,
+                        underlying_ticker=underlying_ticker,
+                        contract_type="call",
+                        expiration_date=expiration_date,
+                        as_of=as_of,
+                        strike_price=strike_price,
+                        expired=expired,
+                        limit=limit,
+                        sort=sort,
+                        order=order,
+                        params=params,
+                    )
+
+                    # Wrapper to offset batch numbers for puts
+                    async def puts_callback(batch_num, data):
+                        await batch_callback(batch_num + batch_counter, data)
+
+                    # Fetch puts
+                    await fetcher.fetch_all(
+                        method_name="list_options_contracts",
+                        batch_callback=puts_callback,
+                        underlying_ticker=underlying_ticker,
+                        contract_type="put",
+                        expiration_date=expiration_date,
+                        as_of=as_of,
+                        strike_price=strike_price,
+                        expired=expired,
+                        limit=limit,
+                        sort=sort,
+                        order=order,
+                        params=params,
+                    )
+                else:
+                    # Fetch single contract type
+                    await fetcher.fetch_all(
+                        method_name="list_options_contracts",
+                        batch_callback=batch_callback,
+                        underlying_ticker=underlying_ticker,
+                        contract_type=contract_type,
+                        expiration_date=expiration_date,
+                        as_of=as_of,
+                        strike_price=strike_price,
+                        expired=expired,
+                        limit=limit,
+                        sort=sort,
+                        order=order,
+                        params=params,
+                    )
+
                 # Finalize and return cache metadata
                 return await finalize()
             else:
                 # Memory mode (fallback if batch writing not available)
                 fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-                contracts_list = await fetcher.fetch_all(
-                    method_name="list_options_contracts",
-                    underlying_ticker=underlying_ticker,
-                    contract_type=contract_type,
-                    expiration_date=expiration_date,
-                    as_of=as_of,
-                    strike_price=strike_price,
-                    expired=expired,
-                    limit=limit,
-                    sort=sort,
-                    order=order,
-                    params=params,
-                )
+
+                if contract_type is None:
+                    # Fetch both calls and puts
+                    async def fetch_wrapper(method_name, **kwargs):
+                        return await fetcher.fetch_all(
+                            method_name=method_name, **kwargs
+                        )
+
+                    contracts_list = await _fetch_both_contract_types(
+                        fetch_func=fetch_wrapper,
+                        method_name="list_options_contracts",
+                        underlying_ticker=underlying_ticker,
+                        expiration_date=expiration_date,
+                        as_of=as_of,
+                        strike_price=strike_price,
+                        expired=expired,
+                        limit=limit,
+                        sort=sort,
+                        order=order,
+                        params=params,
+                    )
+                else:
+                    # Fetch single contract type
+                    contracts_list = await fetcher.fetch_all(
+                        method_name="list_options_contracts",
+                        underlying_ticker=underlying_ticker,
+                        contract_type=contract_type,
+                        expiration_date=expiration_date,
+                        as_of=as_of,
+                        strike_price=strike_price,
+                        expired=expired,
+                        limit=limit,
+                        sort=sort,
+                        order=order,
+                        params=params,
+                    )
+
                 csv_data = json_to_csv({"results": contracts_list})
                 return await process_tool_response(
                     "list_options_contracts", tool_params, csv_data
@@ -481,7 +591,7 @@ async def list_snapshot_options_chain(
 
     Parameters:
     - underlying_asset: Stock ticker (e.g., "AAPL", "TSLA", "SPY")
-    - contract_type: Filter by type ("call" or "put")
+    - contract_type: Filter by type ("call", "put", or None for BOTH)
     - expiration_date: Filter by expiration (YYYY-MM-DD)
     - strike_price_gte/lte: Filter by strike range
     - expiration_date_gte/lte: Filter by expiration range
@@ -490,8 +600,11 @@ async def list_snapshot_options_chain(
 
     RECOMMENDED: Always use fetch_all=True to cache complete options chain data locally for efficient DuckDB analysis.
 
-    Example: list_snapshot_options_chain("AAPL", contract_type="call", fetch_all=True)
-    Example: list_snapshot_options_chain("SPY", strike_price_gte=450, strike_price_lte=500, contract_type="put", fetch_all=True)
+    DEFAULT BEHAVIOR with fetch_all=True: When contract_type is None, automatically fetches BOTH calls and puts.
+
+    Example: list_snapshot_options_chain("AAPL", fetch_all=True)  # Gets both calls and puts
+    Example: list_snapshot_options_chain("AAPL", contract_type="call", fetch_all=True)  # Only calls
+    Example: list_snapshot_options_chain("SPY", strike_price_gte=450, strike_price_lte=500, fetch_all=True)
 
     Returns: break_even, day, greeks, implied_volatility, last_quote, last_trade, open_interest per contract. Includes GEX and advanced greeks.
     """
@@ -538,22 +651,87 @@ async def list_snapshot_options_chain(
             if batch_callback:
                 # Streaming mode - write batches to disk incrementally
                 fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-                await fetcher.fetch_all(
-                    method_name="list_snapshot_options_chain",
-                    batch_callback=batch_callback,
-                    underlying_asset=underlying_asset,
-                    params=param_dict,
-                )
+
+                if contract_type is None:
+                    # Fetch both calls and puts
+                    batch_counter = 0
+
+                    # Create param dict for calls
+                    calls_param_dict = param_dict.copy()
+                    calls_param_dict["contract_type"] = "call"
+
+                    # Wrapper to track batch count for calls
+                    async def calls_callback(batch_num, data):
+                        nonlocal batch_counter
+                        batch_counter = max(batch_counter, batch_num + 1)
+                        await batch_callback(batch_num, data)
+
+                    # Fetch calls
+                    await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        batch_callback=calls_callback,
+                        underlying_asset=underlying_asset,
+                        params=calls_param_dict,
+                    )
+
+                    # Create param dict for puts
+                    puts_param_dict = param_dict.copy()
+                    puts_param_dict["contract_type"] = "put"
+
+                    # Wrapper to offset batch numbers for puts
+                    async def puts_callback(batch_num, data):
+                        await batch_callback(batch_num + batch_counter, data)
+
+                    # Fetch puts
+                    await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        batch_callback=puts_callback,
+                        underlying_asset=underlying_asset,
+                        params=puts_param_dict,
+                    )
+                else:
+                    # Fetch single contract type
+                    await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        batch_callback=batch_callback,
+                        underlying_asset=underlying_asset,
+                        params=param_dict,
+                    )
+
                 # Finalize and return cache metadata
                 return await finalize()
             else:
                 # Memory mode (fallback if batch writing not available)
                 fetcher = PolygonParallelFetcher(polygon_client, num_workers=5)
-                options_list = await fetcher.fetch_all(
-                    method_name="list_snapshot_options_chain",
-                    underlying_asset=underlying_asset,
-                    params=param_dict,
-                )
+
+                if contract_type is None:
+                    # Fetch both calls and puts
+                    calls_param_dict = param_dict.copy()
+                    calls_param_dict["contract_type"] = "call"
+                    puts_param_dict = param_dict.copy()
+                    puts_param_dict["contract_type"] = "put"
+
+                    calls_list = await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        underlying_asset=underlying_asset,
+                        params=calls_param_dict,
+                    )
+                    puts_list = await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        underlying_asset=underlying_asset,
+                        params=puts_param_dict,
+                    )
+
+                    # Combine results
+                    options_list = calls_list + puts_list
+                else:
+                    # Fetch single contract type
+                    options_list = await fetcher.fetch_all(
+                        method_name="list_snapshot_options_chain",
+                        underlying_asset=underlying_asset,
+                        params=param_dict,
+                    )
+
                 # Get current stock price by fetching the underlying ticker snapshot
                 stock_price = None
                 try:
