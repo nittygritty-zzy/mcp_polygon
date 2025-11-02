@@ -61,10 +61,18 @@ def json_to_csv(json_input: str | dict) -> str:
 
     if isinstance(data, dict) and "results" in data:
         records = data["results"]
+
+        # Handle technical indicators format: {"results": {"underlying": {...}, "values": [...]}}
+        if isinstance(records, dict) and "values" in records:
+            records = records["values"]
     elif isinstance(data, list):
         records = data
     else:
         records = [data]
+
+    # Ensure records is a list
+    if not isinstance(records, list):
+        records = [records]
 
     flattened_records = [_flatten_dict(record) for record in records]
 
