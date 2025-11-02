@@ -885,15 +885,36 @@ class CacheManager:
         Returns:
             Metadata dictionary with cache location and query info
         """
-        # Get partition path
-        partition_path, partition_key = self._get_partition_path(tool_name, params)
+        # Check if tool uses data-driven partitioning
+        partition_cols = self._get_partition_columns(tool_name)
 
-        # Calculate total file size
-        total_size = sum(
-            f.stat().st_size
-            for f in partition_path.glob("data_*.parquet")
-            if f.is_file()
-        )
+        if partition_cols:
+            # Data-driven partitioning: data spread across multiple partitions
+            # Use glob pattern that captures all partitions
+            tool_cache_dir = self.cache_dir / tool_name
+            glob_pattern = f"{tool_cache_dir}/**/*.parquet"
+
+            # Calculate total size across all partitions for this tool
+            total_size = sum(
+                f.stat().st_size
+                for f in tool_cache_dir.rglob("*.parquet")
+                if f.is_file()
+            )
+
+            # For metadata, use tool name as key since data is partitioned
+            partition_key = "data_partitioned"
+
+        else:
+            # Old parameter-based partitioning
+            partition_path, partition_key = self._get_partition_path(tool_name, params)
+            glob_pattern = str(partition_path / "*.parquet")
+
+            # Calculate total file size
+            total_size = sum(
+                f.stat().st_size
+                for f in partition_path.glob("data_*.parquet")
+                if f.is_file()
+            )
 
         # Update metadata
         cache_key = f"{tool_name}/{partition_key}"
@@ -901,7 +922,7 @@ class CacheManager:
         self.metadata["entries"][cache_key] = {
             "tool_name": tool_name,
             "partition_key": partition_key,
-            "file_path": str(partition_path / "data_*.parquet"),
+            "file_path": glob_pattern,
             "file_size_bytes": total_size,
             "row_count": total_rows,
             "columns": columns,
@@ -922,8 +943,6 @@ class CacheManager:
             self._cleanup_lru()
 
         # Return cache metadata for response
-        glob_pattern = str(partition_path / "*.parquet")
-
         return {
             "cached": True,
             "cache_location": glob_pattern,
@@ -933,6 +952,9 @@ class CacheManager:
             "file_size_bytes": total_size,
             "tool_name": tool_name,
             "params": params,
+            "partition_columns": [col for col, _ in partition_cols]
+            if partition_cols
+            else None,
         }
 
     def get(self, tool_name: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1110,39 +1132,93 @@ class CacheManager:
         """
         examples = []
 
+        # Check if tool uses data-driven partitioning
+        partition_cols = self._get_partition_columns(tool_name)
+        uses_partitioning = bool(partition_cols)
+
+        # Extract partition info for examples
+        base_path = str(self.cache_dir / tool_name)
+        ticker_partition = (
+            any("ticker" in col for col, _ in partition_cols)
+            if partition_cols
+            else False
+        )
+
         # Time-series aggregates
         if tool_name in ["get_aggs", "list_aggs"]:
-            examples = [
-                {
-                    "description": "View all data",
-                    "query": f"SELECT * FROM read_parquet('{cache_location}') ORDER BY t",
-                },
-                {
-                    "description": "Calculate daily returns",
-                    "query": f"SELECT t, c as close, LAG(c) OVER (ORDER BY t) as prev_close, (c - LAG(c) OVER (ORDER BY t)) / LAG(c) OVER (ORDER BY t) * 100 as return_pct FROM read_parquet('{cache_location}') ORDER BY t",
-                },
-                {
-                    "description": "Get summary statistics",
-                    "query": f"SELECT COUNT(*) as days, MIN(l) as low, MAX(h) as high, AVG(c) as avg_close, SUM(v) as total_volume FROM read_parquet('{cache_location}')",
-                },
-            ]
+            if uses_partitioning:
+                # Partitioned by ticker and date
+                examples = [
+                    {
+                        "description": "View all data (all tickers, all dates)",
+                        "query": f"SELECT * FROM read_parquet('{cache_location}') ORDER BY T, t",
+                    },
+                    {
+                        "description": "Query specific ticker (efficient - uses partition pruning)",
+                        "query": f"SELECT * FROM read_parquet('{base_path}/AAPL/**/*.parquet') ORDER BY t",
+                    },
+                    {
+                        "description": "Calculate daily returns for a ticker",
+                        "query": f"SELECT t, c as close, LAG(c) OVER (ORDER BY t) as prev_close, (c - LAG(c) OVER (ORDER BY t)) / LAG(c) OVER (ORDER BY t) * 100 as return_pct FROM read_parquet('{base_path}/AAPL/**/*.parquet') ORDER BY t",
+                    },
+                    {
+                        "description": "Get summary statistics across all tickers",
+                        "query": f"SELECT T as ticker, COUNT(*) as days, MIN(l) as low, MAX(h) as high, AVG(c) as avg_close, SUM(v) as total_volume FROM read_parquet('{cache_location}') GROUP BY T ORDER BY ticker",
+                    },
+                ]
+            else:
+                # Non-partitioned
+                examples = [
+                    {
+                        "description": "View all data",
+                        "query": f"SELECT * FROM read_parquet('{cache_location}') ORDER BY t",
+                    },
+                    {
+                        "description": "Calculate daily returns",
+                        "query": f"SELECT t, c as close, LAG(c) OVER (ORDER BY t) as prev_close, (c - LAG(c) OVER (ORDER BY t)) / LAG(c) OVER (ORDER BY t) * 100 as return_pct FROM read_parquet('{cache_location}') ORDER BY t",
+                    },
+                    {
+                        "description": "Get summary statistics",
+                        "query": f"SELECT COUNT(*) as days, MIN(l) as low, MAX(h) as high, AVG(c) as avg_close, SUM(v) as total_volume FROM read_parquet('{cache_location}')",
+                    },
+                ]
 
         # Grouped daily aggregates (market-wide)
         elif tool_name == "get_grouped_daily_aggs":
-            examples = [
-                {
-                    "description": "Top 20 gainers by percentage",
-                    "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc > 0 ORDER BY todaysChangePerc DESC LIMIT 20",
-                },
-                {
-                    "description": "Top 20 losers by percentage",
-                    "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc < 0 ORDER BY todaysChangePerc ASC LIMIT 20",
-                },
-                {
-                    "description": "Highest volume stocks",
-                    "query": f"SELECT T as ticker, v as volume, c as close, todaysChangePerc FROM read_parquet('{cache_location}') ORDER BY v DESC LIMIT 20",
-                },
-            ]
+            if uses_partitioning:
+                examples = [
+                    {
+                        "description": "Top 20 gainers by percentage (all tickers)",
+                        "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc > 0 ORDER BY todaysChangePerc DESC LIMIT 20",
+                    },
+                    {
+                        "description": "Query specific ticker (efficient - uses partition pruning)",
+                        "query": f"SELECT * FROM read_parquet('{base_path}/AAPL/**/*.parquet') ORDER BY t DESC",
+                    },
+                    {
+                        "description": "Top 20 losers by percentage",
+                        "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc < 0 ORDER BY todaysChangePerc ASC LIMIT 20",
+                    },
+                    {
+                        "description": "Highest volume stocks",
+                        "query": f"SELECT T as ticker, v as volume, c as close, todaysChangePerc FROM read_parquet('{cache_location}') ORDER BY v DESC LIMIT 20",
+                    },
+                ]
+            else:
+                examples = [
+                    {
+                        "description": "Top 20 gainers by percentage",
+                        "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc > 0 ORDER BY todaysChangePerc DESC LIMIT 20",
+                    },
+                    {
+                        "description": "Top 20 losers by percentage",
+                        "query": f"SELECT T as ticker, c as close, todaysChangePerc FROM read_parquet('{cache_location}') WHERE todaysChangePerc < 0 ORDER BY todaysChangePerc ASC LIMIT 20",
+                    },
+                    {
+                        "description": "Highest volume stocks",
+                        "query": f"SELECT T as ticker, v as volume, c as close, todaysChangePerc FROM read_parquet('{cache_location}') ORDER BY v DESC LIMIT 20",
+                    },
+                ]
 
         # Ticker listings
         elif tool_name in ["list_tickers", "get_all_tickers"]:
@@ -1343,16 +1419,43 @@ class CacheManager:
 
         # Default examples if none matched
         if not examples:
-            examples = [
+            if uses_partitioning and ticker_partition:
+                # Tool uses ticker-based partitioning
+                examples = [
+                    {
+                        "description": "View all data (all partitions)",
+                        "query": f"SELECT * FROM read_parquet('{cache_location}') LIMIT 100",
+                    },
+                    {
+                        "description": "Query specific ticker (efficient - uses partition pruning)",
+                        "query": f"SELECT * FROM read_parquet('{base_path}/AAPL/**/*.parquet') LIMIT 100",
+                    },
+                    {
+                        "description": "Count rows by partition",
+                        "query": f"SELECT COUNT(*) as total_rows FROM read_parquet('{cache_location}')",
+                    },
+                ]
+            else:
+                examples = [
+                    {
+                        "description": "View all data",
+                        "query": f"SELECT * FROM read_parquet('{cache_location}') LIMIT 100",
+                    },
+                    {
+                        "description": "Count rows",
+                        "query": f"SELECT COUNT(*) as total_rows FROM read_parquet('{cache_location}')",
+                    },
+                ]
+
+        # Add partition pruning note if applicable
+        if uses_partitioning and ticker_partition:
+            examples.insert(
+                0,
                 {
-                    "description": "View all data",
-                    "query": f"SELECT * FROM read_parquet('{cache_location}') LIMIT 100",
+                    "description": "NOTE: Data is partitioned by ticker and/or date for efficient queries",
+                    "query": f"-- Use patterns like '{base_path}/TICKER/**/*.parquet' to query specific tickers\n-- Use patterns like '{base_path}/**/YYYY-MM/*.parquet' to query specific months",
                 },
-                {
-                    "description": "Count rows",
-                    "query": f"SELECT COUNT(*) as total_rows FROM read_parquet('{cache_location}')",
-                },
-            ]
+            )
 
         return examples
 
