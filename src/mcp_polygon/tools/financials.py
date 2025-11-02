@@ -982,6 +982,9 @@ async def list_short_interest(
     NOTE: By default, only fetches last 30 days of data to avoid large downloads.
     Set settlement_date_gte=None to fetch all historical data (requires fetch_all=True).
 
+    IMPORTANT: Settlement dates are published twice monthly (~15th and ~30th). Date-range queries
+    may return empty if no settlement date falls within that range. Query full months for best results.
+
     Example: list_short_interest(ticker="GME")  # Last 30 days
     Example: list_short_interest(ticker="GME", settlement_date_gte="2025-01-01", limit=100)
     Example: list_short_interest(days_to_cover_gt=5, settlement_date_gte="2025-01-01", fetch_all=True)
