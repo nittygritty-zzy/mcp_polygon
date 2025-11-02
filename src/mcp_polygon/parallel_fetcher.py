@@ -47,37 +47,45 @@ class ParallelFetcher:
 
         Returns:
             List of all data items from all pages (empty if batch_callback is used)
+
+        Raises:
+            asyncio.CancelledError: If interrupted, stops immediately and re-raises
         """
         workers = max_workers or self.num_workers
 
-        # Fetch first page to understand pagination
-        first_page_data, first_cursor = await self._fetch_page(fetch_func, None)
+        try:
+            # Fetch first page to understand pagination
+            first_page_data, first_cursor = await self._fetch_page(fetch_func, None)
 
-        # If callback provided, stream the first page
-        if batch_callback:
-            await batch_callback(0, first_page_data)
+            # If callback provided, stream the first page
+            if batch_callback:
+                await batch_callback(0, first_page_data)
 
-        if not first_cursor:
-            # Only one page of data
-            return [] if batch_callback else first_page_data
+            if not first_cursor:
+                # Only one page of data
+                return [] if batch_callback else first_page_data
 
-        # Fetch remaining pages in parallel
-        remaining_results = await self._fetch_parallel_pages(
-            fetch_func=fetch_func,
-            first_cursor=first_cursor,
-            workers=workers,
-            batch_callback=batch_callback,
-            batch_offset=1,  # First page is batch 0
-        )
+            # Fetch remaining pages in parallel
+            remaining_results = await self._fetch_parallel_pages(
+                fetch_func=fetch_func,
+                first_cursor=first_cursor,
+                workers=workers,
+                batch_callback=batch_callback,
+                batch_offset=1,  # First page is batch 0
+            )
 
-        if batch_callback:
-            # Streaming mode - data was written via callbacks
-            return []
-        else:
-            # Memory mode - accumulate and return
-            all_results = first_page_data.copy()
-            all_results.extend(remaining_results)
-            return all_results
+            if batch_callback:
+                # Streaming mode - data was written via callbacks
+                return []
+            else:
+                # Memory mode - accumulate and return
+                all_results = first_page_data.copy()
+                all_results.extend(remaining_results)
+                return all_results
+
+        except asyncio.CancelledError:
+            # Interrupted - stop immediately and re-raise
+            raise
 
     async def _fetch_page(
         self,
@@ -138,12 +146,15 @@ class ParallelFetcher:
         batch_counter = batch_offset
         counter_lock = asyncio.Lock()
 
+        # Cancellation event to stop all workers immediately
+        stop_event = asyncio.Event()
+
         # Worker coroutine
         async def worker():
             """Worker that fetches pages until no more cursors."""
             nonlocal batch_counter
 
-            while True:
+            while not stop_event.is_set():
                 try:
                     # Get next cursor (with timeout to avoid hanging)
                     cursor = await asyncio.wait_for(
@@ -153,6 +164,11 @@ class ParallelFetcher:
                 except asyncio.TimeoutError:
                     # No more work
                     break
+                except asyncio.CancelledError:
+                    # Interrupted - stop immediately
+                    stop_event.set()
+                    cursor_queue.task_done()
+                    raise
 
                 try:
                     # Fetch page
@@ -176,6 +192,11 @@ class ParallelFetcher:
                     # Mark task done
                     cursor_queue.task_done()
 
+                except asyncio.CancelledError:
+                    # Interrupted during fetch - stop immediately
+                    stop_event.set()
+                    cursor_queue.task_done()
+                    raise
                 except Exception as e:
                     print(f"Worker error: {e}")
                     cursor_queue.task_done()
@@ -184,15 +205,21 @@ class ParallelFetcher:
         # Start workers
         worker_tasks = [asyncio.create_task(worker()) for _ in range(workers)]
 
-        # Wait for queue to be empty
-        await cursor_queue.join()
+        try:
+            # Wait for queue to be empty
+            await cursor_queue.join()
+        except asyncio.CancelledError:
+            # Interrupted - signal all workers to stop
+            stop_event.set()
+            raise
+        finally:
+            # Cancel remaining workers
+            for task in worker_tasks:
+                if not task.done():
+                    task.cancel()
 
-        # Cancel remaining workers
-        for task in worker_tasks:
-            task.cancel()
-
-        # Wait for workers to finish
-        await asyncio.gather(*worker_tasks, return_exceptions=True)
+            # Wait for workers to finish
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
 
         return results
 

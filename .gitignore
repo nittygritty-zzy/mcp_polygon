@@ -40,5 +40,9 @@ results/
 # Development scripts (temporary migration tools)
 scripts/
 
-# Claude Code user configuration
-.claude/
+# Claude Code user configuration (allow agents/ for project-specific sub-agents)
+.claude/*
+!.claude/agents/
+
+# Trading journal (user-specific analysis data)
+trading_journal/
