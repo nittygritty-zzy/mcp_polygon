@@ -144,17 +144,8 @@ async def get_sma(
 
             results = polygon_client.get_sma(**kwargs)
 
-            # Parse the response and extract the values array
-            import json
-
-            data = json.loads(results.data.decode("utf-8"))
-            if "results" in data and "values" in data["results"]:
-                # Wrap the values in a results key for consistent CSV formatting
-                formatted_data = {"results": data["results"]["values"]}
-                csv_data = json_to_csv(formatted_data)
-            else:
-                # Convert to CSV
-                csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Convert to CSV (formatters.py handles technical indicator structure)
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
             # Process with intelligent caching
             return await process_tool_response("get_sma", tool_params, csv_data)
@@ -296,17 +287,8 @@ async def get_ema(
 
             results = polygon_client.get_ema(**kwargs)
 
-            # Parse the response and extract the values array
-            import json
-
-            data = json.loads(results.data.decode("utf-8"))
-            if "results" in data and "values" in data["results"]:
-                # Wrap the values in a results key for consistent CSV formatting
-                formatted_data = {"results": data["results"]["values"]}
-                csv_data = json_to_csv(formatted_data)
-            else:
-                # Convert to CSV
-                csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Convert to CSV (formatters.py handles technical indicator structure)
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
             # Process with intelligent caching
             return await process_tool_response("get_ema", tool_params, csv_data)
@@ -461,17 +443,8 @@ async def get_macd(
 
             results = polygon_client.get_macd(**kwargs)
 
-            # Parse the response and extract the values array
-            import json
-
-            data = json.loads(results.data.decode("utf-8"))
-            if "results" in data and "values" in data["results"]:
-                # Wrap the values in a results key for consistent CSV formatting
-                formatted_data = {"results": data["results"]["values"]}
-                csv_data = json_to_csv(formatted_data)
-            else:
-                # Convert to CSV
-                csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Convert to CSV (formatters.py handles technical indicator structure)
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
             # Process with intelligent caching
             return await process_tool_response("get_macd", tool_params, csv_data)
@@ -610,17 +583,8 @@ async def get_rsi(
 
             results = polygon_client.get_rsi(**kwargs)
 
-            # Parse the response and extract the values array
-            import json
-
-            data = json.loads(results.data.decode("utf-8"))
-            if "results" in data and "values" in data["results"]:
-                # Wrap the values in a results key for consistent CSV formatting
-                formatted_data = {"results": data["results"]["values"]}
-                csv_data = json_to_csv(formatted_data)
-            else:
-                # Convert to CSV
-                csv_data = json_to_csv(results.data.decode("utf-8"))
+            # Convert to CSV (formatters.py handles technical indicator structure)
+            csv_data = json_to_csv(results.data.decode("utf-8"))
 
             # Process with intelligent caching
             return await process_tool_response("get_rsi", tool_params, csv_data)
