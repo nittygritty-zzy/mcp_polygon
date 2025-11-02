@@ -21,7 +21,7 @@ sys.path.insert(0, "src")
 # Skip all tests if API key is not set
 pytestmark = pytest.mark.skipif(
     not os.environ.get("POLYGON_API_KEY"),
-    reason="POLYGON_API_KEY environment variable not set"
+    reason="POLYGON_API_KEY environment variable not set",
 )
 
 # Import all tool modules

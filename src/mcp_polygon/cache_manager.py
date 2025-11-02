@@ -63,6 +63,203 @@ class CacheManager:
         with open(self.metadata_file, "w") as f:
             json.dump(self.metadata, f, indent=2, default=str)
 
+    def _get_partition_columns(self, tool_name: str) -> List[Tuple[str, str]]:
+        """
+        Get partition column specifications for a tool.
+
+        Returns list of (column_name, format) tuples where format is:
+        - "ticker": Use value as-is
+        - "date": Parse and format as YYYY-MM
+        - "year": Parse and extract year only
+
+        Column name can be prefixed with "param:" to get value from input params
+        instead of data row (e.g., "param:ticker" for technical indicators)
+
+        Args:
+            tool_name: Name of the MCP tool
+
+        Returns:
+            List of (column_name, format_type) tuples for partitioning
+        """
+        partition_specs = {
+            # Short data
+            "list_short_interest": [("ticker", "ticker"), ("settlement_date", "date")],
+            "list_short_volume": [("ticker", "ticker"), ("date", "date")],
+            # Aggregates (Stock OHLC data)
+            "get_aggs": [("T", "ticker"), ("t", "date")],  # T=ticker, t=timestamp in ms
+            "list_aggs": [("T", "ticker"), ("t", "date")],
+            "get_grouped_daily_aggs": [("T", "ticker"), ("t", "date")],
+            "get_daily_open_close_agg": [
+                ("param:ticker", "ticker"),
+                ("param:date", "date"),
+            ],
+            "get_previous_close_agg": [("T", "ticker"), ("t", "date")],
+            # Financials
+            "list_stock_financials": [
+                ("cik", "ticker"),
+                ("period_of_report_date", "date"),
+            ],
+            "list_financials_income_statements": [
+                ("tickers", "ticker"),
+                ("period_end", "date"),
+            ],
+            "list_financials_balance_sheets": [
+                ("tickers", "ticker"),
+                ("period_end", "date"),
+            ],
+            "list_financials_cash_flow_statements": [
+                ("tickers", "ticker"),
+                ("period_end", "date"),
+            ],
+            "list_stock_ratios": [("ticker", "ticker")],
+            "list_financials_ratios": [("ticker", "ticker"), ("period_end", "date")],
+            # Corporate actions
+            "list_dividends": [("ticker", "ticker"), ("ex_dividend_date", "date")],
+            "list_splits": [("ticker", "ticker"), ("execution_date", "date")],
+            "list_ipos": [("ticker", "ticker"), ("listing_date", "date")],
+            # News
+            "list_ticker_news": [("ticker", "ticker"), ("published_utc", "date")],
+            # Economics
+            "list_treasury_yields": [("date", "date")],
+            "list_inflation": [("date", "date")],
+            "list_inflation_expectations": [("date", "date")],
+            # Technical Indicators (ticker from params, timestamp from data)
+            "get_sma": [("param:ticker", "ticker"), ("timestamp", "date")],
+            "get_ema": [("param:ticker", "ticker"), ("timestamp", "date")],
+            "get_macd": [("param:ticker", "ticker"), ("timestamp", "date")],
+            "get_rsi": [("param:ticker", "ticker"), ("timestamp", "date")],
+            # Snapshots
+            "list_universal_snapshots": [("ticker", "ticker")],
+            "get_snapshot_all": [("ticker", "ticker")],
+            # Options
+            "list_options_contracts": [
+                ("underlying_ticker", "ticker"),
+                ("expiration_date", "date"),
+            ],
+            "get_options_contract": [("underlying_ticker", "ticker")],
+            "get_options_aggs": [("param:options_ticker", "ticker"), ("t", "date")],
+            "get_options_daily_open_close": [
+                ("param:options_ticker", "ticker"),
+                ("param:date", "date"),
+            ],
+            "get_options_previous_close": [("param:options_ticker", "ticker")],
+            "list_snapshot_options_chain": [
+                ("param:underlying_asset", "ticker"),
+                ("strike_price", "ticker"),
+            ],
+            # Futures
+            "list_futures_aggregates": [
+                ("param:ticker", "ticker"),
+                ("window_start", "date"),
+            ],
+            "list_futures_contracts": [
+                ("product_code", "ticker"),
+                ("expiration_date", "date"),
+            ],
+            "list_futures_products": [("product_code", "ticker")],
+            "list_futures_schedules": [("session_end_date", "date")],
+            "list_futures_schedules_by_product_code": [
+                ("param:product_code", "ticker"),
+                ("session_end_date", "date"),
+            ],
+            # Reference data
+            "list_tickers": [("ticker", "ticker"), ("market", "ticker")],
+            "get_all_tickers": [("ticker", "ticker"), ("market", "ticker")],
+        }
+
+        return partition_specs.get(tool_name, [])
+
+    def _extract_partition_value(
+        self,
+        row: Dict[str, Any],
+        column: str,
+        format_type: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Extract and format partition value from a data row or params.
+
+        Args:
+            row: Data row as dictionary
+            column: Column name to extract (can be prefixed with "param:" to get from params)
+            format_type: How to format the value ("ticker", "date", "year")
+            params: Optional input parameters dict
+
+        Returns:
+            Formatted partition value
+        """
+        # Check if column should come from params
+        if column.startswith("param:"):
+            param_key = column[6:]  # Remove "param:" prefix
+            value = params.get(param_key) if params else None
+        else:
+            value = row.get(column)
+
+        if value is None:
+            return "null"
+
+        if format_type == "ticker":
+            return str(value).replace("/", "_")  # Sanitize for paths
+
+        elif format_type == "date":
+            # Parse date and extract year-month
+            try:
+                # Handle various date formats
+                if isinstance(value, (int, float)):
+                    # Unix timestamp in milliseconds
+                    dt = datetime.fromtimestamp(value / 1000.0)
+                elif isinstance(value, str) and value.isdigit():
+                    # String representation of Unix timestamp in milliseconds
+                    dt = datetime.fromtimestamp(int(value) / 1000.0)
+                else:
+                    # ISO date string
+                    dt = datetime.fromisoformat(str(value).replace("Z", "+00:00")[:19])
+                return f"{dt.year}-{dt.month:02d}"
+            except (ValueError, TypeError):
+                return "unknown"
+
+        elif format_type == "year":
+            try:
+                if isinstance(value, (int, float)):
+                    dt = datetime.fromtimestamp(value / 1000.0)
+                elif isinstance(value, str) and value.isdigit():
+                    dt = datetime.fromtimestamp(int(value) / 1000.0)
+                else:
+                    dt = datetime.fromisoformat(str(value).replace("Z", "+00:00")[:19])
+                return str(dt.year)
+            except (ValueError, TypeError):
+                return "unknown"
+
+        return str(value)
+
+    def _get_partition_path_from_data(
+        self,
+        tool_name: str,
+        row: Dict[str, Any],
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """
+        Generate partition path from actual data row and/or input params.
+
+        Args:
+            tool_name: Name of the tool
+            row: First row of data to extract partition values from
+            params: Optional input parameters (for tools where partition key is in params)
+
+        Returns:
+            Partition path string (e.g., "AAPL/2025-03") or None if no partitioning
+        """
+        partition_cols = self._get_partition_columns(tool_name)
+        if not partition_cols:
+            return None
+
+        path_parts = []
+        for column, format_type in partition_cols:
+            value = self._extract_partition_value(row, column, format_type, params)
+            path_parts.append(value)
+
+        return "/".join(path_parts)
+
     def _get_partition_path(
         self, tool_name: str, params: Dict[str, Any]
     ) -> Tuple[Path, str]:
@@ -588,13 +785,13 @@ class CacheManager:
         csv_data: str,
         batch_num: int,
         columns: Optional[List[str]] = None,
-    ) -> Path:
+    ) -> List[Path]:
         """
-        Save a batch of CSV data to a numbered Parquet file.
+        Save a batch of CSV data with automatic data-driven partitioning.
 
-        This allows incremental writing without holding all data in memory.
-        Multiple batches are written as separate files (data_001.parquet, data_002.parquet, etc.)
-        which can be queried together using glob patterns.
+        This method automatically partitions data based on column values (ticker, date, etc.)
+        rather than relying on input parameters. Each partition gets its own directory
+        and numbered files.
 
         Args:
             tool_name: Name of the tool
@@ -604,31 +801,68 @@ class CacheManager:
             columns: Optional column names (extracted from first batch)
 
         Returns:
-            Path to the written Parquet file
+            List of paths to written Parquet files (one per partition)
         """
         import io
         import csv as csv_module
+        from collections import defaultdict
 
-        # Parse CSV to DataFrame
+        # Parse CSV to rows
         reader = csv_module.DictReader(io.StringIO(csv_data))
         rows = list(reader)
 
         if not rows:
             # Empty batch, skip
-            return None
+            return []
 
-        df = pd.DataFrame(rows)
+        # Check if tool has partition columns defined
+        partition_cols = self._get_partition_columns(tool_name)
 
-        # Get partition path
-        partition_path, partition_key = self._get_partition_path(tool_name, params)
-        partition_path.mkdir(parents=True, exist_ok=True)
+        if not partition_cols:
+            # No partitioning defined, use old parameter-based approach
+            df = pd.DataFrame(rows)
+            partition_path, partition_key = self._get_partition_path(tool_name, params)
+            partition_path.mkdir(parents=True, exist_ok=True)
+            parquet_file = partition_path / f"data_{batch_num:03d}.parquet"
+            table = pa.Table.from_pandas(df)
+            pq.write_table(table, parquet_file, compression="snappy")
+            return [parquet_file]
 
-        # Save to numbered Parquet file
-        parquet_file = partition_path / f"data_{batch_num:03d}.parquet"
-        table = pa.Table.from_pandas(df)
-        pq.write_table(table, parquet_file, compression="snappy")
+        # Group rows by partition path
+        partition_groups = defaultdict(list)
+        for row in rows:
+            partition_str = self._get_partition_path_from_data(tool_name, row, params)
+            if partition_str:
+                partition_groups[partition_str].append(row)
 
-        return parquet_file
+        # Write each partition group
+        written_files = []
+        for partition_str, group_rows in partition_groups.items():
+            # Create partition directory
+            partition_path = self.cache_dir / tool_name / partition_str
+            partition_path.mkdir(parents=True, exist_ok=True)
+
+            # Find next batch number for this partition
+            existing_files = list(partition_path.glob("data_*.parquet"))
+            if existing_files:
+                # Extract max batch number
+                max_num = max(
+                    int(f.stem.split("_")[1])
+                    for f in existing_files
+                    if f.stem.startswith("data_")
+                )
+                next_num = max_num + 1
+            else:
+                next_num = 0
+
+            # Write partition data
+            df = pd.DataFrame(group_rows)
+            parquet_file = partition_path / f"data_{next_num:03d}.parquet"
+            table = pa.Table.from_pandas(df)
+            pq.write_table(table, parquet_file, compression="snappy")
+            written_files.append(parquet_file)
+
+        return written_files
 
     def finalize_batch_save(
         self,

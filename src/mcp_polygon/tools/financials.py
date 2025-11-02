@@ -952,7 +952,7 @@ async def list_short_interest(
     days_to_cover_lte: Optional[float] = None,
     settlement_date_any_of: Optional[str] = None,
     settlement_date_gt: Optional[Union[str, datetime, date]] = None,
-    settlement_date_gte: Optional[Union[str, datetime, date]] = None,
+    settlement_date_gte: Optional[Union[str, datetime, date]] = "auto",
     settlement_date_lt: Optional[Union[str, datetime, date]] = None,
     settlement_date_lte: Optional[Union[str, datetime, date]] = None,
     avg_daily_volume_any_of: Optional[str] = None,
@@ -961,7 +961,7 @@ async def list_short_interest(
     avg_daily_volume_lt: Optional[int] = None,
     avg_daily_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
-    fetch_all: Optional[bool] = True,
+    fetch_all: Optional[bool] = False,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -973,21 +973,32 @@ async def list_short_interest(
     Parameters:
     - ticker: Ticker symbol (e.g., "GME")
     - days_to_cover_gt: Days to cover threshold (5-7+ indicates high squeeze risk)
-    - settlement_date_gte/lte: Settlement date range (YYYY-MM-DD)
+    - settlement_date_gte: Start date filter (YYYY-MM-DD, defaults to last 30 days)
+    - settlement_date_lte: End date filter (YYYY-MM-DD)
     - avg_daily_volume_lt: Volume filter for liquidity screening
     - limit: Number of results per page (default: 10, max: 50000)
-    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
+    - fetch_all: If True, fetch ALL pages (use with date filters to avoid large downloads)
 
-    RECOMMENDED: Always use fetch_all=True to cache complete short interest data locally for efficient DuckDB analysis.
+    NOTE: By default, only fetches last 30 days of data to avoid large downloads.
+    Set settlement_date_gte=None to fetch all historical data (requires fetch_all=True).
 
-    Example: list_short_interest(ticker="GME", fetch_all=True)
+    Example: list_short_interest(ticker="GME")  # Last 30 days
+    Example: list_short_interest(ticker="GME", settlement_date_gte="2025-01-01", limit=100)
     Example: list_short_interest(days_to_cover_gt=5, settlement_date_gte="2025-01-01", fetch_all=True)
 
     Returns: short_interest, days_to_cover, avg_daily_volume, settlement_date. Formula: days_to_cover = short_interest ÷ avg_daily_volume. Bi-monthly FINRA snapshots.
     """
     try:
+        # Auto-set settlement_date_gte to last month if "auto"
+        if settlement_date_gte == "auto":
+            from datetime import timedelta
+
+            last_month = datetime.now() - timedelta(days=30)
+            settlement_date_gte = last_month.strftime("%Y-%m-%d")
+
         tool_params = build_params(
             ticker=ticker,
+            settlement_date_gte=settlement_date_gte,
             limit=limit,
             fetch_all=fetch_all,
         )
@@ -1110,7 +1121,7 @@ async def list_short_volume(
     ticker_lte: Optional[str] = None,
     date_any_of: Optional[str] = None,
     date_gt: Optional[Union[str, datetime, date]] = None,
-    date_gte: Optional[Union[str, datetime, date]] = None,
+    date_gte: Optional[Union[str, datetime, date]] = "auto",
     date_lt: Optional[Union[str, datetime, date]] = None,
     date_lte: Optional[Union[str, datetime, date]] = None,
     short_volume_ratio_any_of: Optional[str] = None,
@@ -1124,7 +1135,7 @@ async def list_short_volume(
     total_volume_lt: Optional[int] = None,
     total_volume_lte: Optional[int] = None,
     limit: Optional[int] = 10,
-    fetch_all: Optional[bool] = True,
+    fetch_all: Optional[bool] = False,
     sort: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -1135,22 +1146,33 @@ async def list_short_volume(
 
     Parameters:
     - ticker: Ticker symbol (e.g., "TSLA")
-    - date_gte/lte: Date range (YYYY-MM-DD)
+    - date_gte: Start date filter (YYYY-MM-DD, defaults to last 30 days)
+    - date_lte: End date filter (YYYY-MM-DD)
     - short_volume_ratio_gt: Short volume ratio threshold (>50% is high bearish pressure)
     - total_volume_gt: Volume filter
     - limit: Number of results per page (default: 10, max: 50000)
-    - fetch_all: If True (recommended), fetch ALL data and cache to disk for DuckDB queries (default: True)
+    - fetch_all: If True, fetch ALL pages (use with date filters to avoid large downloads)
 
-    RECOMMENDED: Always use fetch_all=True to cache complete short volume data locally for efficient DuckDB analysis.
+    NOTE: By default, only fetches last 30 days of data to avoid large downloads.
+    Set date_gte=None to fetch all historical data (requires fetch_all=True).
 
-    Example: list_short_volume(ticker="TSLA", date_gte="2025-03-01", fetch_all=True)
+    Example: list_short_volume(ticker="TSLA")  # Last 30 days
+    Example: list_short_volume(ticker="TSLA", date_gte="2025-03-01", limit=100)
     Example: list_short_volume(short_volume_ratio_gt=50, date_gte="2025-01-01", fetch_all=True)
 
     Returns: short_volume, total_volume, short_volume_ratio, date. Formula: short_volume_ratio = (short_volume / total_volume) × 100. Daily FINRA transactions (T+1).
     """
     try:
+        # Auto-set date_gte to last month if "auto"
+        if date_gte == "auto":
+            from datetime import timedelta
+
+            last_month = datetime.now() - timedelta(days=30)
+            date_gte = last_month.strftime("%Y-%m-%d")
+
         tool_params = build_params(
             ticker=ticker,
+            date_gte=date_gte,
             limit=limit,
             fetch_all=fetch_all,
         )
