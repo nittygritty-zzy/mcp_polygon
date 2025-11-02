@@ -125,6 +125,8 @@ The server implements tools for all major Polygon.io API endpoints:
   - Financial statements: `list_stock_financials`, `list_financials_balance_sheets`, `list_financials_cash_flow_statements`, `list_financials_income_statements`
   - Financial ratios: `list_financials_ratios` (historical from SEC filings), `list_stock_ratios` (current TTM ratios for stock screening)
   - Market sentiment: `list_short_interest` (bi-monthly short interest data), `list_short_volume` (daily short sale volume tracking)
+- **Screeners**: High-performance composite tools combining multiple data sources
+  - Short squeeze: `screen_short_squeeze` (comprehensive screening with fundamental validation), `validate_squeeze_candidate` (deep dive on single ticker)
 - **Corporate Actions**: IPOs (`list_ipos`), splits (`list_splits`), dividends (`list_dividends`), events (`get_ticker_events`)
 - **News & Insights**: Benzinga news and analyst data (`list_ticker_news`, `list_benzinga_*`)
 - **Futures**: Contracts, quotes, trades, schedules (`list_futures_*`, `get_futures_*`)
@@ -210,3 +212,529 @@ from mcp_polygon.formatters import json_to_csv  # Avoid
 
 ### Version Management
 Version is set in `pyproject.toml` and automatically included in Polygon API client User-Agent header.
+
+## Advanced Features: Short Squeeze Screener
+
+### Overview
+
+The short squeeze screener (`screen_short_squeeze`) is a high-performance composite tool that combines multiple Polygon API endpoints to identify potential short squeeze candidates with comprehensive validation.
+
+**Key Features:**
+- **Speed**: Scans 1000s of stocks in ~30 seconds using parallel API calls and caching
+- **Accuracy**: Mandatory fundamental validation avoids false positives (learned from FLWS case study - see `trading_journal/2025-11-01_VALIDATION_REPORT.md`)
+- **Comprehensive**: Combines short metrics + fundamentals + optional catalyst detection
+
+### Usage Examples
+
+```python
+# Basic scan with recommended defaults
+screen_short_squeeze(min_days_to_cover=10.0)
+
+# Conservative scan (strict fundamentals)
+screen_short_squeeze(
+    min_days_to_cover=10.0,
+    min_market_cap=100_000_000,
+    require_profitability=True,
+    require_positive_fcf=True,
+    max_debt_to_equity=1.0
+)
+
+# Quick scan (skip optional checks for speed)
+screen_short_squeeze(
+    check_catalysts=False,
+    max_results=20
+)
+```
+
+### Architecture
+
+The screener is implemented as a **multi-step composite tool** (unlike single-endpoint tools):
+
+1. **Step 1**: Fetch short interest data (`list_short_interest`) with `days_to_cover` filter
+2. **Step 2**: Join with stock fundamentals (`list_stock_ratios`) with API-side filtering
+3. **Step 3**: Optional catalyst detection (news scan via `list_ticker_news`)
+4. **Step 4**: Score and rank candidates using composite algorithm
+5. **Step 5**: Cache results to Parquet for DuckDB analysis
+
+### Performance Optimizations
+
+**Speed techniques used:**
+- `PolygonParallelFetcher` with 5 concurrent workers for pagination
+- API-side filtering (push filters to Polygon, reduce data transfer)
+- In-memory pandas joins (faster than repeated API calls)
+- Intelligent caching (results partitioned by `scan_date` for trend analysis)
+
+**Typical performance:**
+- 1000+ stock universe: 20-30 seconds
+- 5000+ stock universe: 30-45 seconds (depends on result count)
+- API calls: ~5-10 (significantly less than naive approach)
+
+### Validation Strategy
+
+The screener implements lessons learned from failed candidates (see trading journal 2025-11-01):
+
+**Mandatory filters** (prevent value traps):
+- `require_profitability=True` (default): Filter to EPS > 0
+  - **Why**: FLWS had EPS=-$3.44 (unprofitable company)
+- `min_market_cap=50M` (default): Ensure minimum liquidity
+  - **Why**: Micro-caps with extreme volatility are untradeable
+- `max_debt_to_equity=2.0` (default): Avoid overleveraged companies
+  - **Why**: High debt + unprofitability = bankruptcy risk
+
+**Optional validation** (improves signal quality):
+- `require_positive_fcf=True`: Filter to Free Cash Flow > 0
+  - Stricter than EPS (GAAP accounting vs actual cash)
+- `check_catalysts=True`: Scan recent news for triggers
+  - Squeezes need catalysts (earnings, product launch, etc.)
+- `check_sector_context=True`: Compare to sector ETF short metrics
+  - Avoid sector-wide bearishness (e.g., retail sector in FLWS case)
+
+### Output Format
+
+Returns CSV with columns:
+- `ticker`: Stock symbol
+- `days_to_cover`: Short interest ÷ avg daily volume (illiquidity metric)
+- `short_interest_shares`: Total shares sold short
+- `market_cap`: Market capitalization
+- `price`: Current stock price
+- `eps`: Earnings per share (TTM)
+- `free_cash_flow`: Free cash flow (TTM)
+- `debt_to_equity`: Total debt ÷ total equity
+- `squeeze_score`: Composite score (0-100, higher = stronger candidate)
+- `has_catalyst`: Boolean flag for recent news/events
+- `validation_passed`: Summary of which criteria passed/failed
+
+### Caching and Analysis
+
+Results are cached to `./cache/screen_short_squeeze/YYYY-MM/data_*.parquet` for historical tracking.
+
+**DuckDB analysis examples:**
+```sql
+-- Compare today's scan vs last week
+SELECT
+    t1.ticker,
+    t1.squeeze_score as score_today,
+    t2.squeeze_score as score_last_week,
+    t1.squeeze_score - t2.squeeze_score as score_change
+FROM read_parquet('./cache/screen_short_squeeze/2025-11/data_*.parquet') t1
+LEFT JOIN read_parquet('./cache/screen_short_squeeze/2025-10/data_*.parquet') t2
+  ON t1.ticker = t2.ticker
+WHERE t1.squeeze_score > 50
+ORDER BY score_change DESC;
+
+-- Find stocks with improving fundamentals
+SELECT ticker, days_to_cover, eps, debt_to_equity
+FROM read_parquet('./cache/screen_short_squeeze/**/*.parquet')
+WHERE eps > 0 AND debt_to_equity < 1.0
+ORDER BY days_to_cover DESC;
+```
+
+### Important Limitations
+
+1. **Data Freshness**: Short interest data is bi-monthly (published ~15th and 30th)
+   - Latest data may be 2-4 weeks old
+   - Use `list_short_volume` for daily short sale activity
+
+2. **False Signals**: High days-to-cover can indicate:
+   - **Good**: Short trap (shorts can't exit easily)
+   - **Bad**: Liquidity crisis (no one wants to buy)
+   - **Solution**: Fundamental validation separates these cases
+
+3. **Sector Context**: Individual stock squeeze vs sector-wide rotation
+   - Use `check_sector_context=True` to validate stock-specific setup
+
+### Related Tools
+
+- `validate_squeeze_candidate(ticker)`: Deep dive on single stock (TODO: full implementation)
+- `list_short_interest(ticker)`: Check 6-month short interest trend
+- `list_short_volume(ticker)`: Check daily short volume for covering signals
+- `list_stock_ratios(ticker)`: Full fundamental analysis
+- `duckdb_query(sql)`: Custom analysis of cached screener results
+
+### Best Practices
+
+**Before entering positions:**
+1. Run screener to identify candidates
+2. Validate 6-month short interest trend (should be DECLINING)
+3. Check daily short volume trend (covering ongoing?)
+4. Verify fundamentals (business quality, profitability)
+5. Identify catalyst (earnings, news, events within 30 days)
+6. Compare to sector ETF (stock-specific vs sector-wide pressure)
+
+**Example workflow:**
+```python
+# Step 1: Find candidates
+screen_short_squeeze(min_days_to_cover=15.0, require_profitability=True)
+
+# Step 2: Validate top candidate (e.g., GME)
+list_short_interest(ticker="GME", settlement_date_gte="2025-04-01", fetch_all=True)
+list_short_volume(ticker="GME", date_gte="2025-10-01", fetch_all=True)
+list_ticker_news(ticker="GME", published_utc_gte="2025-10-01", limit=10)
+
+# Step 3: Analyze trends with DuckDB
+duckdb_query("""
+    SELECT settlement_date, short_interest, days_to_cover
+    FROM read_parquet('./cache/list_short_interest/GME/**/*.parquet')
+    ORDER BY settlement_date DESC
+    LIMIT 10
+""")
+```
+
+See `trading_journal/2025-11-01_VALIDATION_REPORT.md` for detailed case study on avoiding false positives.
+
+## Advanced Features: Contrarian Entry Point Screener (逆向入场点)
+
+### Overview
+The contrarian entry screener (`screen_contrarian_entry`) identifies oversold stocks with excessive shorting at technical support levels for mean reversion opportunities.
+
+**Key Features:**
+- DuckDB-based consecutive day analysis (10-20s with cache)
+- Validates increasing short interest (shorts adding positions = potential trap)
+- Checks 4 technical support levels (50/200-day SMA, RSI < 30, 52-week low)
+- Optional fundamental filters (market cap, profitability, leverage)
+
+### Signal Logic
+
+The screener finds stocks where shorts may be overextended and due for a bounce:
+
+1. **Persistent High Short Volume**: 3+ consecutive days with short_volume_ratio > 60%
+2. **Increasing Short Interest**: Bi-monthly FINRA data shows shorts ADDING positions (+% change)
+3. **Technical Support**: Price within 5% of at least one support level
+4. **Fundamental Health**: Optional filters for market cap, profitability, leverage
+
+**Contrarian Thesis:**
+- Heavy shorting (>60% of volume) for multiple days = extreme bearish pressure
+- Shorts building positions (increasing SI) = potential for short trap
+- Price holding at support = buyers defending level
+- RSI oversold (<30) = technical bounce likely
+- **Entry**: Buy when all signals align, stop loss below support
+
+### Usage Examples
+
+```python
+# Basic contrarian scan (recommended defaults)
+screen_contrarian_entry(
+    min_short_volume_ratio=60.0,
+    min_consecutive_days=3,
+    support_proximity_pct=5.0
+)
+
+# Conservative scan (strict fundamentals + higher thresholds)
+screen_contrarian_entry(
+    min_short_volume_ratio=65.0,
+    min_consecutive_days=5,
+    support_proximity_pct=3.0,
+    require_profitability=True,
+    max_debt_to_equity=2.0
+)
+
+# Aggressive scan (extreme oversold conditions)
+screen_contrarian_entry(
+    min_short_volume_ratio=70.0,
+    min_consecutive_days=7,
+    support_proximity_pct=2.0,
+    max_results=20
+)
+
+# Quick exploratory scan (relaxed filters)
+screen_contrarian_entry(
+    min_short_volume_ratio=55.0,
+    min_consecutive_days=3,
+    require_profitability=False,
+    max_debt_to_equity=5.0,
+    max_results=30
+)
+```
+
+### Architecture
+
+**5-Step Pipeline:**
+
+```python
+# Step 1: Fetch high short volume candidates (DuckDB or API)
+sv_candidates = await _fetch_high_short_volume_candidates(
+    min_ratio=60.0,
+    min_consecutive_days=3,
+    lookback_days=30
+)
+# Uses DuckDB window functions on cached data:
+# ROW_NUMBER() OVER ... - ROW_NUMBER() OVER PARTITION BY ... = streak counting
+
+# Step 2: Validate short interest trend (increasing = shorts trapped)
+si_validated = await _validate_short_interest_trend(sv_candidates)
+# Fetches 6-month history, calculates (last_SI - first_SI) / first_SI
+# Filters for positive % change only
+
+# Step 3: Check technical support (4 levels)
+support_validated = await _check_technical_support(
+    candidates=si_validated,
+    proximity_pct=5.0
+)
+# Checks: 50-day SMA, 200-day SMA, RSI < 30, near 52-week low
+
+# Step 4: Fundamental validation (reuse from short squeeze screener)
+fundamental_validated = await _validate_fundamentals(...)
+
+# Step 5: Score and rank
+scored = _score_contrarian_signal(candidates, max_results=50)
+```
+
+**Consecutive Day Counting (DuckDB Window Functions):**
+
+```sql
+WITH daily_sv AS (
+    SELECT ticker, date, short_volume_ratio,
+        CASE WHEN short_volume_ratio > 60 THEN 1 ELSE 0 END as is_high_sv
+    FROM read_parquet('./cache/list_short_volume/**/*.parquet')
+),
+streaks AS (
+    SELECT ticker, date, short_volume_ratio,
+        -- Streak ID: groups consecutive rows with same is_high_sv value
+        ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date) -
+        ROW_NUMBER() OVER (PARTITION BY ticker, is_high_sv ORDER BY date) as streak_id
+    FROM daily_sv
+    WHERE is_high_sv = 1
+)
+SELECT ticker, COUNT(*) as consecutive_days, AVG(short_volume_ratio) as avg_sv_ratio
+FROM streaks
+GROUP BY ticker, streak_id
+HAVING COUNT(*) >= 3
+```
+
+### Technical Support Detection
+
+The screener checks 4 support levels in parallel:
+
+**1. 50-day Simple Moving Average (Medium-term support)**
+- Most common support for swing trades
+- Price within proximity_pct (default: 5%) triggers signal
+- Example: Price $42.40, SMA-50 $42.00 → 0.95% distance → Support
+
+**2. 200-day Simple Moving Average (Long-term support)**
+- Major institutional support level
+- Bull/bear market divider
+- Stronger signal than 50-day SMA
+
+**3. RSI < 30 (Technical oversold)**
+- Relative Strength Index below 30 = oversold
+- Mean reversion catalyst
+- Independent of price/SMA
+
+**4. Near 52-week Low (Extreme oversold)**
+- Price within 10% of 52-week low
+- Capitulation signal
+- Higher risk but stronger bounce potential
+
+**At least 1 support must trigger** for candidate to pass. Multiple supports = stronger signal.
+
+### Scoring Algorithm
+
+```python
+contrarian_score = (
+    consecutive_days_score * 0.35 +      # More days = stronger oversold
+    short_interest_trend_score * 0.25 +  # Increasing SI = shorts trapped
+    support_level_count_score * 0.25 +   # Multiple supports = stronger
+    avg_sv_ratio_score * 0.15            # Higher ratio = more extreme
+)
+```
+
+**Normalization:**
+- `consecutive_days`: 0-10 days → 0-100 score (cap at 10 days)
+- `si_trend`: 0-50% increase → 0-100 score (cap at +50%)
+- `support_count`: 1-4 supports → 25-100 score
+- `avg_sv_ratio`: 60-80% → 0-100 score
+
+**Example Calculation:**
+```
+Ticker: XYZ
+- 7 consecutive days (70% of 10 max) = 70 points * 0.35 = 24.5
+- +25% SI increase (50% of 50% max) = 50 points * 0.25 = 12.5
+- 3 supports (75% of 4 max) = 75 points * 0.25 = 18.75
+- 70% avg SV ratio ((70-60)/20) = 50 points * 0.15 = 7.5
+Total contrarian_score = 63.25
+```
+
+### Output Format
+
+CSV columns:
+```
+ticker,consecutive_high_sv_days,avg_sv_ratio,short_interest_trend_pct,
+price,support_level,rsi,market_cap,eps,debt_to_equity,
+contrarian_score,entry_rationale
+```
+
+**Example Output:**
+```csv
+ticker,consecutive_high_sv_days,avg_sv_ratio,short_interest_trend_pct,price,support_level,rsi,market_cap,contrarian_score,entry_rationale
+XYZ,5,67.5,15.2,42.40,at_50day_sma/rsi_oversold,28.5,500000000,87.3,"5 days >67.5% SV | at_50day_sma/rsi_oversold | SI +15.2%"
+ABC,3,62.1,8.7,15.80,at_200day_sma,31.2,250000000,72.1,"3 days >62.1% SV | at_200day_sma | SI +8.7%"
+```
+
+### Performance
+
+**Expected Runtime:**
+- First run (no cache): 40-60 seconds (fetch indicators for all candidates)
+- Subsequent runs: 10-20 seconds (DuckDB queries on cached data)
+- With cache + limited candidates: 5-10 seconds
+
+**Data Requirements:**
+- Short volume (30 days): ~30 rows per ticker
+- Short interest (6 months): ~12 rows per ticker (bi-monthly)
+- Technical indicators: RSI, SMA-50, SMA-200, OHLC (252 days for 52-week low)
+
+**Optimization Tips:**
+1. Run `list_short_volume(fetch_all=True)` periodically to cache data
+2. Cache technical indicators for watched tickers
+3. Use `fetch_all=False` for quick exploratory scans
+4. Increase `min_short_volume_ratio` to reduce candidate count
+
+### Risk Management Example
+
+From user specification:
+```
+Stock: XYZ
+Screening Results:
+- 5 consecutive days with 67% short volume ratio
+- Short interest +15.2% over 6 months
+- Price $42.40 at 50-day SMA ($42.00)
+- RSI 28.5 (oversold)
+
+Entry Strategy:
+- Entry price: $42.40 (at support)
+- Stop loss: $41.00 (below 50-day SMA)
+- Risk: ($42.40 - $41.00) / $42.40 = 3.3% per trade
+- Target: Mean reversion to recent high or resistance (5-10% gain)
+- Position size: Risk 1-2% of portfolio per trade
+```
+
+### Important Limitations
+
+**1. Data Lag:**
+- Short volume: T+1 lag (yesterday's data available today)
+- Short interest: Bi-monthly, 2-4 weeks old
+- Technical indicators: Based on most recent close
+
+**2. False Signals:**
+- High short volume may indicate legitimate bearishness
+- Support levels can break (use stop losses!)
+- Contrarian plays are inherently risky (fight the trend)
+- Macro events can override technical signals
+
+**3. Validation Requirements:**
+- **ALWAYS check fundamentals** (avoid failing companies)
+- **Verify support is holding** (not just approaching)
+- **Check volume** at support level (high volume = strong defense)
+- **Review news** for catalyst or deterioration
+
+**4. Market Conditions:**
+- Works best in range-bound markets (mean reversion environment)
+- Less effective in strong trends (don't fight the tape)
+- Requires sufficient liquidity (min_market_cap filter)
+
+### Best Practices
+
+**1. Pre-Scan Setup:**
+```python
+# Cache short volume data for faster scans
+await list_short_volume(date_gte="2025-10-01", fetch_all=True)
+
+# Cache short interest for trend analysis
+await list_short_interest(settlement_date_gte="2025-04-01", fetch_all=True)
+```
+
+**2. Multi-Tier Workflow:**
+```python
+# Tier 1: Quick exploratory scan (relaxed filters)
+quick_scan = await screen_contrarian_entry(
+    min_consecutive_days=3,
+    fetch_all=False
+)
+
+# Tier 2: Filter to top candidates (strict filters)
+conservative_scan = await screen_contrarian_entry(
+    min_consecutive_days=5,
+    min_short_volume_ratio=65.0,
+    require_profitability=True,
+    max_results=10
+)
+
+# Tier 3: Manual validation
+# - Check daily charts for support confirmation
+# - Review recent news for catalysts or warnings
+# - Verify volume at support level
+# - Calculate position size based on stop loss
+```
+
+**3. DuckDB Analysis (Post-Scan):**
+```python
+# Analyze historical performance of screened candidates
+sql = """
+SELECT
+    ticker,
+    MAX(consecutive_high_sv_days) as max_streak,
+    AVG(contrarian_score) as avg_score,
+    COUNT(*) as scan_appearances
+FROM read_parquet('./cache/screen_contrarian_entry/**/*.parquet')
+GROUP BY ticker
+ORDER BY scan_appearances DESC, avg_score DESC
+LIMIT 20
+"""
+```
+
+### Related Tools
+
+- `list_short_volume(ticker)` - Check daily short volume trend
+- `list_short_interest(ticker)` - Verify 6-month SI trend
+- `get_rsi(ticker)` - Get RSI oversold confirmation
+- `get_sma(ticker, window=50)` - Check 50-day SMA distance
+- `get_sma(ticker, window=200)` - Check 200-day SMA distance
+- `get_aggs(ticker)` - Get price action and 52-week low
+- `list_stock_ratios(ticker)` - Full fundamental analysis
+
+### Differences from Short Squeeze Screener
+
+| Feature | Short Squeeze | Contrarian Entry |
+|---------|--------------|------------------|
+| **Primary Signal** | Days-to-cover (illiquidity) | Consecutive high short volume (overselling) |
+| **Short Interest Trend** | Prefer declining (covering) | Require increasing (building positions) |
+| **Technical Analysis** | Optional | Mandatory (4 support levels) |
+| **Profitability Filter** | Mandatory (default: True) | Optional (default: False) |
+| **Leverage Tolerance** | Conservative (2.0) | Lenient (3.0) |
+| **Risk Profile** | Lower (quality companies) | Higher (contrarian plays) |
+| **Holding Period** | Weeks to months (squeeze development) | Days to weeks (mean reversion) |
+| **Best Use Case** | Fundamental quality + short trap | Technical oversold + short trap |
+
+### Example Journal Entry (Trading Workflow)
+
+```markdown
+## 2025-11-02 Contrarian Scan Results
+
+### Screener Output
+scan_contrarian_entry(min_consecutive_days=5, min_short_volume_ratio=65.0)
+
+### Top Candidate: XYZ
+- Consecutive days: 7 days >68% short volume
+- Short interest trend: +22% over 6 months
+- Support levels: at_50day_sma + rsi_oversold (2/4 supports)
+- Price: $42.40 vs SMA-50: $42.00 (0.95% above)
+- RSI: 27.3 (oversold)
+- Fundamentals: $500M mcap, EPS $1.20, D/E 2.1
+
+### Action Plan
+1. **Entry**: $42.40 (current price at support)
+2. **Stop Loss**: $41.00 (3.3% below entry, below 50-day SMA)
+3. **Target**: $46.00 (8.5% gain, previous resistance)
+4. **Position Size**: 2% portfolio risk = (2% / 3.3%) = 60% of normal size
+5. **Catalyst**: Check for upcoming earnings or news
+
+### Validation Checklist
+- [x] Fundamentals acceptable (profitable, not overleveraged)
+- [x] Support confirmed (price holding for 2+ days)
+- [x] Volume analysis (above-average volume at support)
+- [ ] News review (pending - check for deterioration)
+- [ ] Sector context (check retail sector ETF for comparison)
+```
+
+---
+
+**Implementation Details:** See `src/mcp_polygon/tools/screeners.py` lines 531-1153 for full implementation.

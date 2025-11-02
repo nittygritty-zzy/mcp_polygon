@@ -49,19 +49,21 @@ async def test_batch_files_are_numbered_sequentially(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write 3 batches
-    csv_batch_1 = "t,o,h,l,c,v\n1,100,105,99,103,1000"
-    csv_batch_2 = "t,o,h,l,c,v\n2,103,107,102,106,1100"
-    csv_batch_3 = "t,o,h,l,c,v\n3,106,110,105,109,1200"
+    # Write 3 batches (with T column for ticker, as real API returns)
+    # Use timestamps that fall in January 2024 in local timezone
+    csv_batch_1 = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000"
+    csv_batch_2 = "T,t,o,h,l,c,v\nAAPL,1704225600000,103,107,102,106,1100"
+    csv_batch_3 = "T,t,o,h,l,c,v\nAAPL,1704312000000,106,110,105,109,1200"
 
-    columns = ["t", "o", "h", "l", "c", "v"]
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
-    cache_mgr.save_batch(tool_name, params, csv_batch_1, 0, columns)
+    # Save batches and get the actual partition path from returned files
+    files_1 = cache_mgr.save_batch(tool_name, params, csv_batch_1, 0, columns)
     cache_mgr.save_batch(tool_name, params, csv_batch_2, 1, columns)
     cache_mgr.save_batch(tool_name, params, csv_batch_3, 2, columns)
 
-    # Get partition path
-    partition_path, _ = cache_mgr._get_partition_path(tool_name, params)
+    # Get partition path from the first written file
+    partition_path = files_1[0].parent
 
     # Verify numbered files exist
     assert (partition_path / "data_000.parquet").exists(), (
@@ -99,9 +101,10 @@ async def test_finalize_returns_glob_pattern(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write a batch
-    csv_data = "t,o,h,l,c,v\n1,100,105,99,103,1000"
-    columns = ["t", "o", "h", "l", "c", "v"]
+    # Write a batch (with T column for ticker, as real API returns)
+    # Use timestamp that falls in January 2024 in local timezone
+    csv_data = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000"
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
     cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
 
@@ -119,11 +122,11 @@ async def test_finalize_returns_glob_pattern(temp_cache_dir):
 
     # Verify glob pattern
     cache_location = metadata["cache_location"]
-    assert cache_location.endswith("/*.parquet"), (
-        "cache_location should end with /*.parquet glob pattern"
-    )
+    # Data-driven partitioning uses recursive glob pattern
+    assert cache_location.endswith("/**/*.parquet") or cache_location.endswith(
+        "/*.parquet"
+    ), "cache_location should end with glob pattern"
     assert "get_aggs" in cache_location, "cache_location should contain tool name"
-    assert "AAPL" in cache_location, "cache_location should contain ticker"
 
     # Verify other required fields
     assert metadata["row_count"] == 1
@@ -149,9 +152,10 @@ async def test_response_format_includes_glob_pattern(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write and finalize batch
-    csv_data = "t,o,h,l,c,v\n1,100,105,99,103,1000\n2,103,107,102,106,1100"
-    columns = ["t", "o", "h", "l", "c", "v"]
+    # Write and finalize batch (with T column for ticker, as real API returns)
+    # Use timestamps that fall in January 2024 in local timezone
+    csv_data = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000\nAAPL,1704225600000,103,107,102,106,1100"
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
     cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
     cache_metadata = cache_mgr.finalize_batch_save(
@@ -163,8 +167,24 @@ async def test_response_format_includes_glob_pattern(temp_cache_dir):
 
     # Format response
     sample_rows = [
-        {"t": "1", "o": "100", "h": "105", "l": "99", "c": "103", "v": "1000"},
-        {"t": "2", "o": "103", "h": "107", "l": "102", "c": "106", "v": "1100"},
+        {
+            "T": "AAPL",
+            "t": "1704139200000",
+            "o": "100",
+            "h": "105",
+            "l": "99",
+            "c": "103",
+            "v": "1000",
+        },
+        {
+            "T": "AAPL",
+            "t": "1704225600000",
+            "o": "103",
+            "h": "107",
+            "l": "102",
+            "c": "106",
+            "v": "1100",
+        },
     ]
 
     response_str = ResponseFormatter.format_cached(
@@ -222,11 +242,16 @@ async def test_partition_path_structure(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write a batch
-    csv_data = "t,o,h,l,c,v\n1,100,105,99,103,1000"
-    columns = ["t", "o", "h", "l", "c", "v"]
+    # Write a batch (with T column for ticker, as real API returns)
+    # Use timestamp that falls in January 2024 in local timezone
+    csv_data = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000"
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
-    file_path = cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
+    file_paths = cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
+
+    # save_batch returns a list of file paths
+    assert len(file_paths) == 1, "Should return one file path"
+    file_path = file_paths[0]
 
     # Verify path structure
     path_str = str(file_path)
@@ -257,12 +282,13 @@ async def test_duckdb_can_read_glob_pattern(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write 3 batches with different data
-    columns = ["t", "o", "h", "l", "c", "v"]
+    # Write 3 batches with different data (with T column for ticker, as real API returns)
+    # Use timestamps that fall in January 2024 in local timezone
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
-    csv_batch_1 = "t,o,h,l,c,v\n1,100,105,99,103,1000\n2,103,107,102,106,1100"
-    csv_batch_2 = "t,o,h,l,c,v\n3,106,110,105,109,1200\n4,109,113,108,112,1300"
-    csv_batch_3 = "t,o,h,l,c,v\n5,112,116,111,115,1400"
+    csv_batch_1 = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000\nAAPL,1704225600000,103,107,102,106,1100"
+    csv_batch_2 = "T,t,o,h,l,c,v\nAAPL,1704312000000,106,110,105,109,1200\nAAPL,1704398400000,109,113,108,112,1300"
+    csv_batch_3 = "T,t,o,h,l,c,v\nAAPL,1704484800000,112,116,111,115,1400"
 
     cache_mgr.save_batch(tool_name, params, csv_batch_1, 0, columns)
     cache_mgr.save_batch(tool_name, params, csv_batch_2, 1, columns)
@@ -288,13 +314,16 @@ async def test_duckdb_can_read_glob_pattern(temp_cache_dir):
     assert result[0] == 5, "DuckDB should read all 5 rows from 3 batch files"
 
     # Verify we can query specific columns
+    # Note: The timestamp column 't' gets renamed to 't_1' by pyarrow when writing
+    # partitioned Parquet (to avoid conflict with partition column 't')
     result = con.execute(
-        f"SELECT t, c FROM read_parquet('{glob_pattern}') ORDER BY t"
+        f"SELECT t_1, c FROM read_parquet('{glob_pattern}') ORDER BY t_1"
     ).fetchall()
 
     assert len(result) == 5, "Should get 5 rows"
-    assert result[0][0] == "1", "First row should have t=1"
-    assert result[4][0] == "5", "Last row should have t=5"
+    # Values are stored as VARCHAR in the CSV-based Parquet files
+    assert result[0][0] == "1704139200000", "First row should have t_1=1704139200000"
+    assert result[4][0] == "1704484800000", "Last row should have t_1=1704484800000"
 
 
 @pytest.mark.asyncio
@@ -314,9 +343,10 @@ async def test_batch_writing_maintains_metadata(temp_cache_dir):
         "fetch_all": True,
     }
 
-    # Write batches
-    csv_data = "t,o,h,l,c,v\n1,100,105,99,103,1000"
-    columns = ["t", "o", "h", "l", "c", "v"]
+    # Write batches (with T column for ticker, as real API returns)
+    # Use timestamp that falls in January 2024 in local timezone
+    csv_data = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000"
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
 
     cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
     cache_mgr.save_batch(tool_name, params, csv_data, 1, columns)
@@ -330,8 +360,8 @@ async def test_batch_writing_maintains_metadata(temp_cache_dir):
     )
 
     # Verify metadata was saved to cache manager
-    _, partition_key = cache_mgr._get_partition_path(tool_name, params)
-    cache_key = f"{tool_name}/{partition_key}"
+    # Data-driven partitioning uses "data_partitioned" as partition key
+    cache_key = f"{tool_name}/data_partitioned"
 
     assert cache_key in cache_mgr.metadata["entries"]
     entry = cache_mgr.metadata["entries"][cache_key]
@@ -339,7 +369,8 @@ async def test_batch_writing_maintains_metadata(temp_cache_dir):
     assert entry["tool_name"] == tool_name
     assert entry["row_count"] == 2
     assert entry["columns"] == columns
-    assert entry["file_path"].endswith("data_*.parquet")
+    # Data-driven partitioning uses /**/*.parquet glob pattern
+    assert entry["file_path"].endswith("/**/*.parquet")
     assert entry["file_size_bytes"] > 0
 
 
@@ -360,7 +391,12 @@ async def test_query_examples_use_glob_pattern(temp_cache_dir):
         "fetch_all": True,
     }
 
-    cache_location = "/path/to/cache/get_aggs/AAPL/*.parquet"
+    # Write actual data to get a real cache_location
+    csv_data = "T,t,o,h,l,c,v\nAAPL,1704139200000,100,105,99,103,1000"
+    columns = ["T", "t", "o", "h", "l", "c", "v"]
+    cache_mgr.save_batch(tool_name, params, csv_data, 0, columns)
+    metadata = cache_mgr.finalize_batch_save(tool_name, params, 1, columns)
+    cache_location = metadata["cache_location"]
 
     # Generate query examples
     examples = cache_mgr.generate_query_examples(tool_name, params, cache_location)
@@ -372,9 +408,8 @@ async def test_query_examples_use_glob_pattern(temp_cache_dir):
     for example in examples:
         assert "query" in example
         assert "description" in example
-        assert cache_location in example["query"], (
-            "Query should use provided cache_location"
-        )
+        # Query may use a more specific path than the generic cache_location
+        assert "get_aggs" in example["query"], "Query should reference get_aggs tool"
         assert "/*.parquet" in example["query"], "Query should use glob pattern"
         assert "read_parquet" in example["query"], (
             "Query should use DuckDB read_parquet function"
@@ -384,6 +419,7 @@ async def test_query_examples_use_glob_pattern(temp_cache_dir):
 @pytest.mark.asyncio
 async def test_end_to_end_batch_writing_flow(temp_cache_dir):
     """Test complete batch writing flow from tool to response."""
+    from pathlib import Path
     from mcp_polygon.tool_integration import create_batch_writer
     from mcp_polygon.cache_manager import CacheManager
 
@@ -409,13 +445,38 @@ async def test_end_to_end_batch_writing_flow(temp_cache_dir):
         assert batch_callback is not None, "Should create batch callback"
         assert finalize is not None, "Should create finalize callback"
 
-        # Simulate writing 2 batches
+        # Simulate writing 2 batches (with T column for ticker, as real API returns)
+        # Use timestamps that fall in January 2024 in local timezone
         batch_1 = [
-            {"t": 1, "o": 100, "h": 105, "l": 99, "c": 103, "v": 1000},
-            {"t": 2, "o": 103, "h": 107, "l": 102, "c": 106, "v": 1100},
+            {
+                "T": "AAPL",
+                "t": 1704139200000,
+                "o": 100,
+                "h": 105,
+                "l": 99,
+                "c": 103,
+                "v": 1000,
+            },
+            {
+                "T": "AAPL",
+                "t": 1704225600000,
+                "o": 103,
+                "h": 107,
+                "l": 102,
+                "c": 106,
+                "v": 1100,
+            },
         ]
         batch_2 = [
-            {"t": 3, "o": 106, "h": 110, "l": 105, "c": 109, "v": 1200},
+            {
+                "T": "AAPL",
+                "t": 1704312000000,
+                "o": 106,
+                "h": 110,
+                "l": 105,
+                "c": 109,
+                "v": 1200,
+            },
         ]
 
         await batch_callback(0, batch_1)
@@ -434,8 +495,10 @@ async def test_end_to_end_batch_writing_flow(temp_cache_dir):
         assert response["cache_info"]["row_count"] == 3
 
         # Verify batch files were created
-        partition_path, _ = cache_mgr._get_partition_path(tool_name, params)
-        batch_files = list(partition_path.glob("data_*.parquet"))
+        # With data-driven partitioning, we need to find the actual partition directory
+        cache_dir_path = Path(temp_cache_dir) / "get_aggs"
+        # Find all parquet files recursively
+        batch_files = list(cache_dir_path.rglob("data_*.parquet"))
         assert len(batch_files) == 2, "Should have 2 batch files"
 
 

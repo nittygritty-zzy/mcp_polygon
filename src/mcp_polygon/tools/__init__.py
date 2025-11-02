@@ -22,6 +22,7 @@ from . import futures
 from . import currency
 from . import alpha_vantage
 from . import query
+from .. import screeners
 
 __all__ = [
     "aggregates",
@@ -37,4 +38,5 @@ __all__ = [
     "currency",
     "alpha_vantage",
     "query",
+    "screeners",
 ]

@@ -85,6 +85,13 @@ class CacheManager:
             # Short data
             "list_short_interest": [("ticker", "ticker"), ("settlement_date", "date")],
             "list_short_volume": [("ticker", "ticker"), ("date", "date")],
+            # Screeners
+            "screen_short_squeeze": [("param:scan_date", "date")],
+            "screen_contrarian_entry": [("param:scan_date", "date")],
+            "validate_squeeze_candidate": [
+                ("ticker", "ticker"),
+                ("param:scan_date", "date"),
+            ],
             # Aggregates (Stock OHLC data)
             "get_aggs": [("T", "ticker"), ("t", "date")],  # T=ticker, t=timestamp in ms
             "list_aggs": [("T", "ticker"), ("t", "date")],
