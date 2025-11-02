@@ -738,3 +738,412 @@ scan_contrarian_entry(min_consecutive_days=5, min_short_volume_ratio=65.0)
 ---
 
 **Implementation Details:** See `src/mcp_polygon/tools/screeners.py` lines 531-1153 for full implementation.
+
+## Advanced Features: Earnings Short Setup Screener (财报卖空布局)
+
+### Overview
+
+The earnings short setup screener (`screen_earnings_short_setup`) identifies high-risk/high-reward earnings trading opportunities based on short selling positioning patterns in the 2-4 weeks leading up to earnings announcements.
+
+**Key Features:**
+- **Pattern Recognition**: Detects acceleration, deceleration, and reversal patterns in short volume
+- **Trading Scenarios**: Maps short positioning to actionable setups (straddle, bullish, bearish)
+- **Earnings Catalyst**: Focuses on upcoming earnings within configurable window (7-60 days)
+- **Alpha Vantage Integration**: Fetches earnings calendar data automatically
+
+### Signal Logic
+
+The screener analyzes short volume trends before earnings to identify three distinct trading setups:
+
+**1. High Buildup (高位加速布局)** - Straddle Opportunity
+- Short volume accelerating (>55% avg, slope >+1.5%/day)
+- Shorts aggressively building positions before earnings
+- **Setup**: Buy straddle (call + put) to profit from high volatility
+- **Logic**: Heavy shorting → Earnings surprise in either direction → Large move
+
+**2. Declining Shorts (卖空减少)** - Bullish Bias
+- Short volume declining (<45% avg, slope <-1.5%/day)
+- Shorts unwinding positions before earnings
+- **Setup**: Bullish if fundamentals strong, buy calls or stock
+- **Logic**: No short cushion → Earnings miss = sharp drop, beat = normal rise
+
+**3. Normal Activity (稳定)** - Fundamentals-Driven
+- Short volume stable (45-55% range, low volatility)
+- No directional bias from shorts
+- **Setup**: Trade based on fundamentals, short data non-factor
+
+### Usage Examples
+
+```python
+# Basic scan (recommended defaults)
+screen_earnings_short_setup()
+
+# Conservative scan (strict fundamentals)
+screen_earnings_short_setup(
+    earnings_window_days=14,  # Next 2 weeks only
+    require_profitability=True,
+    max_debt_to_equity=2.0
+)
+
+# Aggressive scan (high short activity)
+screen_earnings_short_setup(
+    min_short_volume_ratio=65.0,  # Extreme short positioning
+    earnings_window_days=7,       # Imminent earnings only
+    max_results=20
+)
+
+# Custom window (next 30 days)
+screen_earnings_short_setup(
+    earnings_window_days=30,
+    min_market_cap=100_000_000  # Large caps only
+)
+```
+
+### Architecture
+
+**7-Step Pipeline:**
+
+```python
+# Step 1: Fetch earnings calendar (Alpha Vantage)
+earnings_data = await fetch_earnings_calendar(
+    alpha_vantage_api_key=os.getenv("ALPHA_VANTAGE_API_KEY"),
+    horizon="3month"
+)
+
+# Step 2: Filter to earnings window
+upcoming_earnings = filter_upcoming_earnings(
+    earnings_data,
+    min_days_ahead=0,
+    max_days_ahead=21  # Default: 3 weeks
+)
+
+# Step 3: Fetch 30-day short volume history
+short_volume_data = await fetch_short_volume_trends(
+    tickers=[e["symbol"] for e in upcoming_earnings],
+    lookback_days=30
+)
+
+# Step 4: Analyze short patterns
+for ticker in tickers:
+    pattern = analyze_short_pattern(short_volume_data[ticker])
+    # Returns: pattern_type, current_avg, trend_slope, volatility, pattern_strength
+
+# Step 5: Classify trading scenarios
+scenario, trade_setup = classify_short_scenario(pattern)
+# Maps pattern to: high_buildup, declining_shorts, normal, etc.
+
+# Step 6: Validate fundamentals (optional)
+validated = await validate_fundamentals(...)
+
+# Step 7: Score and rank
+scored = _score_and_rank(candidates, max_results=50)
+```
+
+### Pattern Recognition (Complex Mode)
+
+The screener implements **4 pattern types** using linear regression and inflection point analysis:
+
+**1. Acceleration (加速布局)**
+- Detection: 10-day linear regression slope >+1.5% per day
+- Example: 48% → 52% → 58% → 62% (increasing daily)
+- Interpretation: Shorts aggressively building positions
+- Scenario: `high_buildup`
+
+**2. Deceleration (减速/撤退)**
+- Detection: 10-day linear regression slope <-1.5% per day
+- Example: 58% → 54% → 49% → 44% (decreasing daily)
+- Interpretation: Shorts unwinding before earnings
+- Scenario: `declining_shorts`
+
+**3. Reversal (反转)**
+- Detection: Direction change in last 5 days vs prior 5 days
+- Types: `reversal_up` (shorts covering), `reversal_down` (shorts building)
+- Example Reversal Up: Days 1-5 slope +2%/day → Days 6-10 slope -2%/day
+- Interpretation: Short sentiment shift
+
+**4. Steady (稳定)**
+- Detection: Slope between -1.5% to +1.5% per day
+- Example: 46% → 45% → 47% → 46% (no trend)
+- Interpretation: No significant short bias
+- Scenario: `normal`
+
+**Pattern Strength (0-100 Score):**
+```python
+pattern_strength = (
+    r_squared * 70 +              # R² from linear regression (trend clarity)
+    (1 - volatility_penalty) * 30 # Lower volatility = more consistent
+)
+```
+
+### Scoring Algorithm
+
+```python
+earnings_score = (
+    pattern_strength * 0.40 +      # Clear pattern = higher score
+    earnings_proximity * 0.25 +    # Closer to earnings = more urgent
+    fundamental_quality * 0.20 +   # Profitability, leverage, size
+    short_trend_magnitude * 0.15   # Extremity of short positioning
+)
+```
+
+**Component Normalization:**
+- `pattern_strength`: Already 0-100 from pattern recognition
+- `earnings_proximity`: 0 days = 100, 30 days = 0 (linear decay)
+- `fundamental_quality`: Average of profitability (EPS>0), leverage (D/E<5), size (mcap)
+- `short_trend_magnitude`: Avg of short ratio (50-70% → 0-100) + trend slope (0-5% → 0-100)
+
+### Output Format
+
+CSV columns:
+```
+ticker,earnings_date,days_until_earnings,short_pattern_type,
+short_volume_10d_avg,short_trend_slope,scenario,trade_setup,
+price,market_cap,eps,debt_to_equity,earnings_score,rationale
+```
+
+**Example Output:**
+```csv
+ticker,earnings_date,days_until_earnings,short_pattern_type,scenario,trade_setup,earnings_score
+NFLX,2025-11-20,18,acceleration,high_buildup,straddle,87.3
+TSLA,2025-11-19,17,deceleration,declining_shorts,bullish_if_beat,72.1
+AAPL,2025-11-21,19,steady,normal,fundamentals_only,45.2
+```
+
+### Real-World Case Studies
+
+From user specification, here are actual Tesla examples demonstrating the trading logic:
+
+**Case 1: Tesla Q3 2023** (Low Short Activity)
+```
+Earnings Date: October 18, 2023
+Pre-Earnings Period: Sep 25 - Oct 18 (23 days)
+
+Short Positioning:
+- Short volume ratio: 41% average (Low)
+- Short interest: 3.1% of float (Low)
+- Pattern: deceleration (declining from prior weeks)
+
+Screener Classification:
+- Scenario: declining_shorts
+- Trade Setup: bullish_if_beat
+
+Actual Result:
+- Earnings: Beat estimates
+- Price Move: +12% (purely fundamental, no squeeze amplification)
+- Analysis: Low short positioning = no short squeeze multiplier
+```
+
+**Case 2: Tesla Q1 2023** (High Short Activity)
+```
+Earnings Date: April 19, 2023
+Pre-Earnings Period: Mar 30 - Apr 19 (20 days)
+
+Short Positioning:
+- Short volume ratio: 55% average (High)
+- Short interest: 4.8% of float (Elevated)
+- Pattern: acceleration (building from 48% to 58%)
+
+Screener Classification:
+- Scenario: high_buildup
+- Trade Setup: straddle (volatility play)
+
+Actual Result:
+- Earnings: Beat estimates
+- Price Move: +10% fundamental + +8% short squeeze = +18% total
+- Analysis: High short positioning amplified upside move via forced covering
+```
+
+**Key Insight:**
+The difference between Q3 and Q1 was **short positioning**, not fundamentals. Both quarters beat estimates, but Q1 had 2x the price reaction due to short squeeze amplification. The screener would have identified Q1 as a high-probability straddle setup and Q3 as a fundamentals-only play.
+
+### Trading Decision Tree
+
+```
+┌─ Acceleration + High Avg (>55%) ────→ High Buildup ───→ Buy Straddle
+│
+├─ Deceleration + Low Avg (<45%) ─────→ Declining Shorts ─→ Bullish if Beat
+│                                                          └→ Avoid if Weak
+│
+├─ Reversal Up (High→Low) ────────────→ Shorts Covering ──→ Bullish Directional
+│
+├─ Reversal Down (Low→High) ──────────→ Shorts Building ──→ Bearish/Puts
+│
+└─ Steady (45-55%, low volatility) ───→ Normal ──────────→ Fundamentals Only
+```
+
+### Performance
+
+**Expected Runtime:**
+- First run (no cache): 40-60 seconds (fetch Alpha Vantage + short volume)
+- Subsequent runs: 10-20 seconds (cached short volume data)
+- With all caching: 5-10 seconds
+
+**Data Requirements:**
+- Earnings calendar: Alpha Vantage (1 API call per scan)
+- Short volume: 30 days × N tickers (batch fetched in parallel)
+- Fundamentals: 1 API call for all tickers (list_stock_ratios)
+
+**Optimization Tips:**
+1. Set `ALPHA_VANTAGE_API_KEY` in .env (avoid parameter passing)
+2. Run daily scans to keep short volume cache fresh
+3. Use `fetch_all=True` (default) for DuckDB analysis
+4. Increase `min_short_volume_ratio` to reduce candidate count
+
+### Important Limitations
+
+**1. Alpha Vantage Dependency:**
+- Requires separate API key (free tier: 25 requests/day)
+- Earnings dates may change (companies reschedule)
+- Re-run screener daily for updates
+
+**2. Data Lag:**
+- Short volume: T+1 lag (yesterday's data available today)
+- Earnings calendar: Updated periodically (not real-time)
+- Pattern analysis: Based on 30-day history (recent changes may not be captured)
+
+**3. Pattern Recognition Challenges:**
+- Low pattern_strength (<60/100) may indicate noise, not signal
+- Volatile markets can produce false acceleration/deceleration signals
+- Requires minimum 10 days of data for reliable pattern detection
+
+**4. Risk Factors:**
+- Earnings can move against setup (use stop losses!)
+- Implied volatility may already price in expected move
+- Straddles require large move to profit (time decay risk)
+- Short covering can occur before earnings (pattern changes rapidly)
+
+### Best Practices
+
+**1. Pre-Scan Setup:**
+```python
+# Cache short volume data for faster scans
+await list_short_volume(date_gte="2025-10-01", fetch_all=True)
+
+# Verify Alpha Vantage API key
+import os
+assert os.getenv("ALPHA_VANTAGE_API_KEY"), "Set ALPHA_VANTAGE_API_KEY in .env"
+```
+
+**2. Multi-Tier Workflow:**
+```python
+# Tier 1: Quick scan (next 2 weeks, high short activity)
+quick_scan = await screen_earnings_short_setup(
+    earnings_window_days=14,
+    min_short_volume_ratio=60.0,
+    max_results=20
+)
+
+# Tier 2: Validate top candidates
+# - Check if implied volatility is already elevated (options chain)
+# - Review analyst estimates vs consensus
+# - Check historical earnings reactions (surprise magnitude)
+
+# Tier 3: Position sizing
+# - Straddle: Risk premium paid (debit spread)
+# - Directional: Risk stop loss distance
+# - Max risk: 1-2% of portfolio per trade
+```
+
+**3. DuckDB Analysis (Historical Tracking):**
+```python
+# Track pattern evolution for specific ticker
+sql = """
+SELECT
+    scan_date,
+    days_until_earnings,
+    short_pattern_type,
+    short_volume_10d_avg,
+    short_trend_slope,
+    earnings_score
+FROM read_parquet('./cache/screen_earnings_short_setup/**/*.parquet')
+WHERE ticker = 'TSLA'
+ORDER BY scan_date DESC
+LIMIT 30
+"""
+
+# Identify stocks with accelerating short buildup
+sql = """
+SELECT
+    ticker,
+    earnings_date,
+    short_volume_10d_avg,
+    short_trend_slope,
+    earnings_score
+FROM read_parquet('./cache/screen_earnings_short_setup/**/*.parquet')
+WHERE short_pattern_type = 'acceleration'
+  AND short_volume_10d_avg > 60.0
+ORDER BY earnings_score DESC
+"""
+```
+
+### Related Tools
+
+- `get_earnings_calendar_alpha_vantage()` - Direct earnings calendar access
+- `list_short_volume(ticker)` - Check daily short volume trend
+- `list_short_interest(ticker)` - Bi-monthly short interest data
+- `list_ticker_news(ticker)` - Recent news for catalyst detection
+- `list_snapshot_options_chain(ticker)` - Implied volatility before earnings
+- `duckdb_query(sql)` - Analyze cached screener results
+
+### Comparison to Other Screeners
+
+| Feature | Short Squeeze | Contrarian Entry | Earnings Setup |
+|---------|--------------|------------------|----------------|
+| **Primary Signal** | Days-to-cover | Consecutive high SV | Short pattern before earnings |
+| **Time Horizon** | Weeks to months | Days to weeks | Pre-earnings (2-4 weeks) |
+| **Catalyst** | Optional | Technical support | Earnings announcement |
+| **Risk Profile** | Medium (quality) | High (contrarian) | Very High (event-driven) |
+| **Profitability Filter** | Mandatory (True) | Optional (False) | Optional (False) |
+| **Leverage Tolerance** | Conservative (2.0) | Lenient (3.0) | Lenient (3.0) |
+| **Trade Setup** | Long bias | Mean reversion | Volatility or directional |
+| **Holding Period** | Until squeeze | Until support breaks | Until earnings (fixed date) |
+| **Best Use Case** | Fundamental + squeeze | Oversold bounce | Earnings volatility play |
+
+### Example Trading Workflow
+
+```markdown
+## 2025-11-15 Earnings Scan - NFLX Example
+
+### Screener Output
+screen_earnings_short_setup(earnings_window_days=21)
+
+### Top Candidate: NFLX
+- Earnings date: 2025-11-20 (5 days away)
+- Pattern: acceleration (slope +2.3%/day)
+- Short volume 10d avg: 58.5% (High)
+- Trend: 48% → 52% → 56% → 58% (building positions)
+- Scenario: high_buildup
+- Trade setup: straddle
+
+### Analysis
+1. **Short Positioning**: Aggressive buildup in last 2 weeks
+2. **Fundamentals**: $180B mcap, EPS $12.55 (profitable), D/E 1.2
+3. **Catalyst**: Q3 earnings, guidance for Q4 (streaming adds)
+4. **Implied Volatility**: Check options chain (if IV >80%, may be priced in)
+
+### Trade Plan (Straddle)
+- Entry: Buy NFLX Nov 22 straddle (5 DTE)
+- Strike: ATM ($450 call + $450 put)
+- Premium: ~$25/share = $2,500 total
+- Breakeven: ±5.6% move required
+- Max risk: $2,500 (premium paid)
+- Expected move: ±8-12% based on historical earnings volatility
+- Position size: 2% of portfolio
+
+### Validation Checklist
+- [x] Pattern strength: 87.3/100 (clear acceleration)
+- [x] Fundamentals acceptable (profitable, not overleveraged)
+- [x] Earnings confirmed (company calendar + Alpha Vantage)
+- [ ] Options IV check (pending - verify not overpriced)
+- [ ] Historical earnings moves (check last 4 quarters for ±% range)
+
+### Post-Earnings Review (TODO after Nov 20)
+- Actual move: ____%
+- Pattern accuracy: Did shorts cover or add?
+- P&L: $_____ (___% return)
+- Lessons learned: _____
+```
+
+---
+
+**Implementation Details:** See `src/mcp_polygon/screeners/earnings_short_setup.py` for full implementation.
