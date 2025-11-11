@@ -93,8 +93,7 @@ class CacheManager:
                 ("param:scan_date", "date"),
             ],
             # Aggregates (Stock OHLC data)
-            "get_aggs": [("T", "ticker"), ("t", "date")],  # T=ticker, t=timestamp in ms
-            "list_aggs": [("T", "ticker"), ("t", "date")],
+            "get_aggs": [("param:ticker", "ticker"), ("t", "date")],  # Use ticker from params, not data
             "get_grouped_daily_aggs": [("T", "ticker"), ("t", "date")],
             "get_daily_open_close_agg": [
                 ("param:ticker", "ticker"),
